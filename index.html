@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>포장지 색깔 검사</title>
+<style>
+  :root{
+    --bg:#f5f4f1;--card:#ffffff;--ink:#26241f;--dim:#8d8a82;--line:#e3e1db;
+    --blue:#2f6fed;--pass:#1fa45c;--fail:#e23d3d;
+    --sans:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+    padding:16px 14px calc(28px + env(safe-area-inset-bottom));max-width:520px;margin:0 auto}
+
+  h1{font-size:20px;font-weight:800;text-align:center;margin-bottom:4px}
+  .sub{text-align:center;font-size:13px;color:var(--dim);margin-bottom:16px}
+
+  .step{
+    display:flex;align-items:center;gap:10px;margin:18px 2px 8px;
+  }
+  .step .num{
+    width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;
+    font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;
+  }
+  .step .txt{font-size:16px;font-weight:700}
+  .step .hint{font-size:12px;color:var(--dim);font-weight:400}
+
+  .bigbtn{
+    width:100%;padding:20px;border:none;border-radius:16px;
+    font-size:19px;font-weight:800;font-family:var(--sans);color:#fff;background:var(--blue);
+    box-shadow:0 3px 10px rgba(47,111,237,.25);
+  }
+  .bigbtn:active{transform:scale(.98)}
+  .bigbtn.gray{background:#fff;color:var(--ink);border:2px solid var(--line);box-shadow:none;font-size:15px;padding:14px}
+  .bigbtn[disabled]{opacity:.35}
+  input[type=file]{display:none}
+
+  .photo{
+    position:relative;background:#000;border-radius:16px;overflow:hidden;margin-top:10px;display:none;
+  }
+  .photo canvas{display:block;width:100%;height:auto;touch-action:none}
+  .photo .guide{
+    position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,.72);color:#fff;font-size:14px;font-weight:700;
+    padding:8px 16px;border-radius:99px;white-space:nowrap;pointer-events:none;
+  }
+  #loupe{
+    position:absolute;width:110px;height:110px;border-radius:50%;
+    border:3px solid #fff;box-shadow:0 4px 16px rgba(0,0,0,.5);
+    pointer-events:none;display:none;background:#000;overflow:hidden;z-index:5;
+  }
+  #loupe canvas{width:110px;height:110px}
+  #loupe::after{content:'';position:absolute;left:50%;top:50%;width:10px;height:10px;
+    transform:translate(-50%,-50%);border:2px solid #fff;outline:2px solid rgba(0,0,0,.7)}
+
+  /* 기준색 카드 */
+  .refcard{
+    display:none;align-items:center;gap:12px;background:var(--card);
+    border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-top:10px;
+  }
+  .refcard .sw{width:54px;height:54px;border-radius:12px;border:1px solid var(--line);flex:none}
+  .refcard .t1{font-size:14px;font-weight:700}
+  .refcard .t2{font-size:12px;color:var(--dim);margin-top:2px}
+  .refcard button{
+    margin-left:auto;background:none;border:1.5px solid var(--line);border-radius:10px;
+    font-size:12px;padding:8px 10px;color:var(--dim);font-family:var(--sans);flex:none;
+  }
+
+  /* 판정 카드 */
+  .result{
+    display:none;border-radius:20px;padding:22px;margin-top:12px;text-align:center;color:#fff;
+  }
+  .result.pass{background:var(--pass)}
+  .result.fail{background:var(--fail)}
+  .result .big{font-size:42px;font-weight:900;letter-spacing:.02em}
+  .result .small{font-size:14px;opacity:.92;margin-top:6px}
+  .result .pair{display:flex;justify-content:center;gap:14px;margin-top:14px}
+  .result .pair .box{background:rgba(255,255,255,.18);border-radius:12px;padding:8px 14px}
+  .result .pair .sw{width:44px;height:44px;border-radius:10px;border:2px solid rgba(255,255,255,.8);margin:0 auto}
+  .result .pair .lb{font-size:11px;margin-top:5px;opacity:.9}
+
+  /* 엄격도 */
+  .strict{display:flex;gap:8px;margin-top:10px}
+  .strict button{
+    flex:1;padding:11px 4px;border-radius:12px;border:2px solid var(--line);
+    background:#fff;font-size:13px;font-weight:700;color:var(--dim);font-family:var(--sans);
+  }
+  .strict button.on{border-color:var(--blue);color:var(--blue);background:#eef3fe}
+
+  /* 기록 */
+  .records{margin-top:22px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .records h2{font-size:14px;font-weight:800;display:flex;justify-content:space-between;align-items:baseline}
+  .records h2 span{font-size:12px;color:var(--dim);font-weight:600}
+  .rec{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .rec:last-child{border-bottom:none}
+  .rec .sw{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);flex:none}
+  .rec .name{flex:1;font-weight:600}
+  .rec .ok{color:var(--pass);font-weight:800}
+  .rec .no{color:var(--fail);font-weight:800}
+  .empty-rec{font-size:13px;color:var(--dim);text-align:center;padding:14px 0}
+  .btnrow{display:flex;gap:8px;margin-top:12px}
+</style>
+</head>
+<body>
+
+<h1>포장지 색깔 검사</h1>
+<div class="sub">사진 찍고, 색을 손가락으로 짚으면 끝!</div>
+
+<!-- 1단계 -->
+<div class="step" id="step1">
+  <div class="num">1</div>
+  <div><div class="txt">기준이 되는 제품 찍기</div>
+  <div class="hint">색이 맞는 '정상 제품'을 먼저 찍어주세요</div></div>
+</div>
+<button class="bigbtn" id="btnRef">📷 기준 제품 찍기</button>
+
+<div class="refcard" id="refcard">
+  <div class="sw" id="refSw"></div>
+  <div><div class="t1">기준색 등록 완료 ✓</div><div class="t2" id="refTxt"></div></div>
+  <button id="btnReRef">다시 정하기</button>
+</div>
+
+<!-- 2단계 -->
+<div id="step2wrap" style="display:none">
+  <div class="step">
+    <div class="num">2</div>
+    <div><div class="txt">검사할 제품 찍기</div>
+    <div class="hint">하나씩 찍어서 비교합니다</div></div>
+  </div>
+  <button class="bigbtn" id="btnTest">📷 검사 제품 찍기</button>
+
+  <div class="strict" id="strict">
+    <button data-tol="2.0">엄격하게</button>
+    <button data-tol="3.5" class="on">보통</button>
+    <button data-tol="6.0">여유있게</button>
+  </div>
+</div>
+
+<!-- 사진 영역 -->
+<div class="photo" id="photo">
+  <div class="guide" id="guide">색깔 부분을 손가락으로 짚어주세요</div>
+  <canvas id="cv"></canvas>
+  <div id="loupe"><canvas id="loupeCv" width="110" height="110"></canvas></div>
+</div>
+
+<!-- 판정 결과 -->
+<div class="result" id="result">
+  <div class="big" id="resBig">합격</div>
+  <div class="small" id="resSmall"></div>
+  <div class="pair">
+    <div class="box"><div class="sw" id="resRefSw"></div><div class="lb">기준색</div></div>
+    <div class="box"><div class="sw" id="resCurSw"></div><div class="lb">이번 제품</div></div>
+  </div>
+</div>
+
+<!-- 기록 -->
+<div class="records">
+  <h2>검사 결과 <span id="stat"></span></h2>
+  <div id="recList"><div class="empty-rec">아직 검사한 제품이 없어요</div></div>
+  <div class="btnrow">
+    <button class="bigbtn gray" id="btnCsv">📄 결과 저장 (엑셀용)</button>
+    <button class="bigbtn gray" id="btnReset" style="flex:.5">처음부터</button>
+  </div>
+</div>
+
+<input type="file" id="file" accept="image/*" capture="environment">
+
+<script>
+(function(){
+  const cv=document.getElementById('cv'),ctx=cv.getContext('2d',{willReadFrequently:true});
+  const loupe=document.getElementById('loupe'),lcv=document.getElementById('loupeCv'),lctx=lcv.getContext('2d');
+  const photo=document.getElementById('photo'),guide=document.getElementById('guide');
+  const fileInput=document.getElementById('file');
+
+  let mode=null;        // 'ref' 또는 'test'
+  let ref=null;         // {r,g,b,lab}
+  let tol=3.5;
+  let records=[];
+
+  // ── 색 변환 / 색차 ──
+  function s2l(c){c/=255;return c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);}
+  function rgb2lab(r,g,b){
+    const R=s2l(r),G=s2l(g),B=s2l(b);
+    let X=(R*0.4124564+G*0.3575761+B*0.1804375)/0.95047;
+    let Y=R*0.2126729+G*0.7151522+B*0.0721750;
+    let Z=(R*0.0193339+G*0.1191920+B*0.9503041)/1.08883;
+    const f=t=>t>0.008856?Math.cbrt(t):(7.787*t+16/116);
+    const fx=f(X),fy=f(Y),fz=f(Z);
+    return [116*fy-16,500*(fx-fy),200*(fy-fz)];
+  }
+  function dE00(L1,a1,b1,L2,a2,b2){
+    const rad=Math.PI/180,deg=180/Math.PI;
+    const C1=Math.hypot(a1,b1),C2=Math.hypot(a2,b2),Cb=(C1+C2)/2;
+    const G=0.5*(1-Math.sqrt(Math.pow(Cb,7)/(Math.pow(Cb,7)+Math.pow(25,7))));
+    const a1p=a1*(1+G),a2p=a2*(1+G);
+    const C1p=Math.hypot(a1p,b1),C2p=Math.hypot(a2p,b2);
+    let h1p=Math.atan2(b1,a1p)*deg;if(h1p<0)h1p+=360;
+    let h2p=Math.atan2(b2,a2p)*deg;if(h2p<0)h2p+=360;
+    const dL=L2-L1,dC=C2p-C1p;
+    let dh=h2p-h1p;
+    if(C1p*C2p===0)dh=0;else if(dh>180)dh-=360;else if(dh<-180)dh+=360;
+    const dH=2*Math.sqrt(C1p*C2p)*Math.sin(dh/2*rad);
+    const Lbp=(L1+L2)/2,Cbp=(C1p+C2p)/2;
+    let hbp;
+    if(C1p*C2p===0)hbp=h1p+h2p;
+    else{hbp=(h1p+h2p)/2;if(Math.abs(h1p-h2p)>180)hbp+=(h1p+h2p<360)?180:-180;}
+    const T=1-0.17*Math.cos((hbp-30)*rad)+0.24*Math.cos(2*hbp*rad)+0.32*Math.cos((3*hbp+6)*rad)-0.20*Math.cos((4*hbp-63)*rad);
+    const dTh=30*Math.exp(-Math.pow((hbp-275)/25,2));
+    const Rc=2*Math.sqrt(Math.pow(Cbp,7)/(Math.pow(Cbp,7)+Math.pow(25,7)));
+    const Sl=1+0.015*Math.pow(Lbp-50,2)/Math.sqrt(20+Math.pow(Lbp-50,2));
+    const Sc=1+0.045*Cbp,Sh=1+0.015*Cbp*T;
+    const Rt=-Math.sin(2*dTh*rad)*Rc;
+    return Math.sqrt(Math.pow(dL/Sl,2)+Math.pow(dC/Sc,2)+Math.pow(dH/Sh,2)+Rt*(dC/Sc)*(dH/Sh));
+  }
+  const hex=(r,g,b)=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+
+  // ── 사진 로드 ──
+  function drawToCanvas(src,w0,h0){
+    const MAX=2200;let w=w0,h=h0;
+    if(Math.max(w,h)>MAX){const s=MAX/Math.max(w,h);w=Math.round(w*s);h=Math.round(h*s);}
+    cv.width=w;cv.height=h;ctx.drawImage(src,0,0,w,h);
+    photo.style.display='block';
+    document.getElementById('result').style.display='none';
+    guide.textContent=mode==='ref'?'기준 색깔을 손가락으로 짚어주세요':'검사할 색깔을 손가락으로 짚어주세요';
+    photo.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+  async function loadFile(file){
+    try{
+      const bmp=await createImageBitmap(file);
+      drawToCanvas(bmp,bmp.width,bmp.height);bmp.close&&bmp.close();return;
+    }catch(e){}
+    try{
+      const dataUrl=await new Promise((res,rej)=>{
+        const fr=new FileReader();fr.onload=()=>res(fr.result);
+        fr.onerror=()=>rej(new Error());fr.readAsDataURL(file);
+      });
+      const img=await new Promise((res,rej)=>{
+        const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error());im.src=dataUrl;
+      });
+      drawToCanvas(img,img.naturalWidth,img.naturalHeight);
+    }catch(e){
+      alert('사진을 불러오지 못했어요.\n설정 → 카메라 → 포맷을 「높은 호환성」으로 바꾼 뒤 다시 찍어보세요.');
+    }
+  }
+  fileInput.onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0]);e.target.value='';};
+  document.getElementById('btnRef').onclick=()=>{mode='ref';fileInput.click();};
+  document.getElementById('btnTest').onclick=()=>{mode='test';fileInput.click();};
+  document.getElementById('btnReRef').onclick=()=>{mode='ref';fileInput.click();};
+
+  // ── 색 짚기 (확대경 + 11×11 평균) ──
+  function canvasPos(cx,cy){
+    const r=cv.getBoundingClientRect();
+    return [Math.min(cv.width-1,Math.max(0,(cx-r.left)/r.width*cv.width)),
+            Math.min(cv.height-1,Math.max(0,(cy-r.top)/r.height*cv.height))];
+  }
+  function sampleAt(x,y){
+    const n=11,h=5;
+    const sx=Math.max(0,Math.round(x)-h),sy=Math.max(0,Math.round(y)-h);
+    const w=Math.min(n,cv.width-sx),ht=Math.min(n,cv.height-sy);
+    const d=ctx.getImageData(sx,sy,w,ht).data;
+    let r=0,g=0,b=0,c=0;
+    for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];c++;}
+    return [Math.round(r/c),Math.round(g/c),Math.round(b/c)];
+  }
+  function showLoupe(cx,cy){
+    const [x,y]=canvasPos(cx,cy);
+    const Z=8,R=110/Z/2;
+    lctx.imageSmoothingEnabled=false;
+    lctx.fillStyle='#000';lctx.fillRect(0,0,110,110);
+    lctx.drawImage(cv,x-R,y-R,R*2,R*2,0,0,110,110);
+    const pr=photo.getBoundingClientRect();
+    loupe.style.left=(cx-pr.left-55)+'px';
+    loupe.style.top=(cy-pr.top-140)+'px';
+    loupe.style.display='block';
+    return [x,y];
+  }
+  let lastXY=null;
+  cv.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];lastXY=showLoupe(t.clientX,t.clientY);},{passive:false});
+  cv.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];lastXY=showLoupe(t.clientX,t.clientY);},{passive:false});
+  cv.addEventListener('touchend',e=>{e.preventDefault();loupe.style.display='none';if(lastXY)pick(lastXY[0],lastXY[1]);},{passive:false});
+  cv.addEventListener('click',e=>{const [x,y]=canvasPos(e.clientX,e.clientY);pick(x,y);});
+
+  // ── 짚은 색 처리 ──
+  function pick(x,y){
+    const [r,g,b]=sampleAt(x,y);
+    if(mode==='ref'){
+      ref={r,g,b,lab:rgb2lab(r,g,b)};
+      document.getElementById('refSw').style.background=`rgb(${r},${g},${b})`;
+      document.getElementById('refTxt').textContent='색 번호 '+hex(r,g,b);
+      document.getElementById('refcard').style.display='flex';
+      document.getElementById('step2wrap').style.display='block';
+      document.getElementById('btnRef').style.display='none';
+      document.getElementById('step1').style.display='none';
+      photo.style.display='none';
+      document.getElementById('step2wrap').scrollIntoView({behavior:'smooth'});
+    }else if(mode==='test'){
+      if(!ref){alert('먼저 기준 제품을 찍어주세요.');return;}
+      const lab=rgb2lab(r,g,b);
+      const de=dE00(...lab,...ref.lab);
+      const ok=de<=tol;
+      // 결과 카드
+      const res=document.getElementById('result');
+      res.className='result '+(ok?'pass':'fail');
+      res.style.display='block';
+      document.getElementById('resBig').textContent=ok?'합격 ✓':'불합격 ✕';
+      document.getElementById('resSmall').textContent=ok
+        ?'기준색과 거의 같아요 (색 차이 '+de.toFixed(1)+')'
+        :'기준색과 차이가 커요 (색 차이 '+de.toFixed(1)+')';
+      document.getElementById('resRefSw').style.background=`rgb(${ref.r},${ref.g},${ref.b})`;
+      document.getElementById('resCurSw').style.background=`rgb(${r},${g},${b})`;
+      photo.style.display='none';
+      // 자동 저장
+      records.push({
+        label:'제품 '+(records.length+1),
+        time:new Date().toISOString(),
+        r,g,b,hex:hex(r,g,b),lab,
+        de,pass:ok,refHex:hex(ref.r,ref.g,ref.b),tol
+      });
+      refreshList();
+      res.scrollIntoView({behavior:'smooth',block:'center'});
+    }
+  }
+
+  // ── 엄격도 ──
+  document.querySelectorAll('#strict button').forEach(btn=>{
+    btn.onclick=()=>{
+      document.querySelectorAll('#strict button').forEach(b=>b.classList.remove('on'));
+      btn.classList.add('on');
+      tol=parseFloat(btn.dataset.tol);
+    };
+  });
+
+  // ── 기록 ──
+  function refreshList(){
+    const list=document.getElementById('recList');
+    if(!records.length){list.innerHTML='<div class="empty-rec">아직 검사한 제품이 없어요</div>';
+      document.getElementById('stat').textContent='';return;}
+    let pass=0;
+    list.innerHTML='';
+    records.slice().reverse().forEach(rec=>{
+      if(rec.pass)pass++;
+      const div=document.createElement('div');
+      div.className='rec';
+      div.innerHTML=`<div class="sw" style="background:rgb(${rec.r},${rec.g},${rec.b})"></div>
+        <div class="name">${rec.label}</div>
+        <div class="${rec.pass?'ok':'no'}">${rec.pass?'합격':'불합격'}</div>`;
+      list.appendChild(div);
+    });
+    document.getElementById('stat').textContent=records.length+'개 검사 · 합격 '+pass+' · 불합격 '+(records.length-pass);
+  }
+  document.getElementById('btnCsv').onclick=()=>{
+    if(!records.length){alert('저장할 결과가 없어요. 먼저 검사를 해주세요.');return;}
+    const head='제품,시각,판정,색차(dE00),측정색HEX,R,G,B,기준색HEX,허용기준\n';
+    const rows=records.map(r=>[
+      r.label,r.time,r.pass?'합격':'불합격',r.de.toFixed(2),r.hex,r.r,r.g,r.b,r.refHex,r.tol
+    ].join(',')).join('\n');
+    const blob=new Blob(['\uFEFF'+head+rows],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='색깔검사결과_'+new Date().toISOString().slice(0,10)+'.csv';
+    a.click();URL.revokeObjectURL(a.href);
+  };
+  document.getElementById('btnReset').onclick=()=>{
+    if(!confirm('기준색과 검사 결과를 모두 지우고 처음부터 시작할까요?'))return;
+    ref=null;records=[];refreshList();
+    document.getElementById('refcard').style.display='none';
+    document.getElementById('step2wrap').style.display='none';
+    document.getElementById('btnRef').style.display='block';
+    document.getElementById('step1').style.display='flex';
+    document.getElementById('result').style.display='none';
+    photo.style.display='none';
+    window.scrollTo({top:0,behavior:'smooth'});
+  };
+})();
+</script>
+</body>
+</html>
