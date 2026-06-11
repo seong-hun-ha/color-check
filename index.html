@@ -149,7 +149,7 @@
   <div class="step">
     <div class="num">1</div>
     <div><div class="txt">기준 제품과 검사 제품을<br>각각 비슷한 구도로 찍기</div>
-    <div class="hint">두 사진을 겹쳐서 글씨 밀림을 확인해요</div></div>
+    <div class="hint">기준 글씨 하나만 짚으면 나머지는 자동 분석!</div></div>
   </div>
   <div class="btnrow">
     <button class="bigbtn" id="btnA1">📷 ① 기준</button>
@@ -159,15 +159,17 @@
     <button class="bigbtn" id="btnA2" disabled>📷 ② 검사</button>
     <button class="bigbtn gray" id="btnA2Alb" style="flex:.45" disabled>🖼 앨범</button>
   </div>
-  <canvas id="acv" style="width:100%;border-radius:16px;background:#000;touch-action:none;display:none;margin-top:10px"></canvas>
-  <div id="alignCtl" style="display:none">
-    <div style="font-size:13px;color:var(--dim);line-height:1.6;margin-top:8px;text-align:center">
-      손가락으로 <b style="color:var(--ink)">검사 사진을 끌어서</b> 포장지 테두리를 겹치세요<br>(두 손가락으로 크기·회전 조절)<br>겹쳤는데 <b style="color:var(--fail)">글씨만 두 겹</b>으로 보이면 밀린 것!
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
-      <span style="font-size:12px;color:var(--dim);flex:none">투명도</span>
-      <input type="range" id="aAlpha" min="10" max="90" value="50" style="flex:1">
-      <button class="bigbtn gray" id="btnBlink" style="flex:none;padding:10px 14px;font-size:13px">⚡ 깜빡이</button>
+  <div id="aMsg" style="display:none;text-align:center;font-size:14px;font-weight:700;margin-top:10px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:12px"></div>
+  <canvas id="acv" style="width:100%;border-radius:16px;background:#000;touch-action:none;display:none;margin-top:8px"></canvas>
+  <div class="btnrow" id="aActions" style="display:none">
+    <button class="bigbtn" id="btnAnalyze">🔍 분석 시작</button>
+  </div>
+  <div id="aResult" style="display:none;margin-top:10px;border-radius:16px;padding:16px;text-align:center;color:#fff">
+    <div id="aVerdict" style="font-size:20px;font-weight:900"></div>
+    <div id="aDetail" style="font-size:13px;opacity:.92;margin-top:5px"></div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+      <button id="btnBlink" style="border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;background:rgba(255,255,255,.2);color:#fff;font-family:var(--sans)">⚡ 깜빡이</button>
+      <button id="btnAReset" style="border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;background:rgba(255,255,255,.2);color:#fff;font-family:var(--sans)">기준 다시 짚기</button>
     </div>
   </div>
 </div>
@@ -239,7 +241,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.7</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.8</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -644,21 +646,24 @@
   tabSep.onclick=()=>setTab(false);
   tabSingle.onclick=()=>setTab(true);
 
-  // ── 글씨 위치 비교 ──
+  // ── 글씨 위치 비교 (자동 분석) ──
   const tabAlign=document.getElementById('tabAlign');
   const alignWrap=document.getElementById('alignWrap');
-  const acv=document.getElementById('acv'),actx=acv.getContext('2d');
-  let imgA=null,imgB=null,ov={x:0,y:0,s:1,r:0},aAlpha=0.5,blinkTimer=null,blinkPhase=0,aTarget='A';
+  const acv=document.getElementById('acv'),actx=acv.getContext('2d',{willReadFrequently:true});
+  const aMsg=document.getElementById('aMsg');
+  let imgA=null,imgB=null,aState='needA',aTarget='A',anchor=null;
+  let gA=null,gB=null,globalOff=null,blocksRes=null;
+  let blinkTimer=null,blinkPhase=0;
+  const S=620; // 분석용 작업 폭
 
   function setAlignTab(on){
     alignWrap.style.display=on?'block':'none';
     document.getElementById('strict').style.display=on?'none':'flex';
     tabAlign.classList.toggle('on',on);
-    if(!on&&blinkTimer){clearInterval(blinkTimer);blinkTimer=null;blinkPhase=0;
-      document.getElementById('btnBlink').textContent='⚡ 깜빡이';}
+    if(!on)stopBlink();
   }
   tabAlign.onclick=()=>{
-    setTab(false); // 다른 모드 정리
+    setTab(false);
     document.getElementById('sepWrap').style.display='none';
     document.getElementById('btnRef').style.display='none';
     document.getElementById('step1').style.display='none';
@@ -666,51 +671,105 @@
     setAlignTab(true);
   };
   const _setTab=setTab;
-  setTab=function(s){setAlignTab(false);_setTab(s);};
+  setTab=function(v){setAlignTab(false);_setTab(v);};
 
   async function fileToImage(file){
     try{return await createImageBitmap(file);}catch(e){}
     const du=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(file);});
     return await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=du;});
   }
-  function aDraw(){
-    if(!imgA)return;
-    const w=acv.width,h=acv.height;
-    actx.setTransform(1,0,0,1,0,0);
-    actx.fillStyle='#000';actx.fillRect(0,0,w,h);
-    const fit=img=>{const sc=Math.min(w/img.width,h/img.height);
-      return ()=>actx.drawImage(img,(w-img.width*sc)/2,(h-img.height*sc)/2,img.width*sc,img.height*sc);};
-    const showA=!blinkTimer||blinkPhase===0;
-    const showB=imgB&&(!blinkTimer||blinkPhase===1);
-    if(showA){actx.globalAlpha=1;fit(imgA)();}
-    if(showB){
-      actx.save();
-      actx.globalAlpha=blinkTimer?1:aAlpha;
-      actx.translate(w/2+ov.x,h/2+ov.y);
-      actx.rotate(ov.r);
-      actx.scale(ov.s,ov.s);
-      actx.translate(-w/2,-h/2);
-      fit(imgB)();
-      actx.restore();
-    }
-    actx.globalAlpha=1;
+
+  // 그레이스케일 변환
+  function grayOf(img,W){
+    const H=Math.max(1,Math.round(img.height*W/img.width));
+    const c=document.createElement('canvas');c.width=W;c.height=H;
+    const cc=c.getContext('2d');cc.drawImage(img,0,0,W,H);
+    const d=cc.getImageData(0,0,W,H).data;
+    const g=new Float32Array(W*H);
+    for(let i=0,j=0;i<g.length;i++,j+=4)g[i]=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2];
+    return {g,W,H};
   }
+  function patchOf(G,x,y,w,h){
+    const p=new Float32Array(w*h);
+    for(let j=0;j<h;j++)for(let i=0;i<w;i++){
+      const xx=Math.min(G.W-1,Math.max(0,x+i)),yy=Math.min(G.H-1,Math.max(0,y+j));
+      p[j*w+i]=G.g[yy*G.W+xx];
+    }
+    return p;
+  }
+  // 정규화 상호상관(NCC) 탐색: 밝기 차이에 강함
+  function nccSearch(G,tmpl,tw,th,x0,y0,x1,y1){
+    let tm=0;for(let i=0;i<tmpl.length;i++)tm+=tmpl[i];tm/=tmpl.length;
+    const tz=new Float32Array(tmpl.length);let tv=0;
+    for(let i=0;i<tmpl.length;i++){tz[i]=tmpl[i]-tm;tv+=tz[i]*tz[i];}
+    const tn=Math.sqrt(tv)||1e-6;
+    let best={x:0,y:0,s:-2};
+    for(let y=Math.max(0,y0);y<=Math.min(G.H-th,y1);y++){
+      for(let x=Math.max(0,x0);x<=Math.min(G.W-tw,x1);x++){
+        let sm=0;
+        for(let j=0;j<th;j++){const r=(y+j)*G.W+x;for(let i=0;i<tw;i++)sm+=G.g[r+i];}
+        sm/=tmpl.length;
+        let dot=0,sv=0;
+        for(let j=0;j<th;j++){const r=(y+j)*G.W+x;
+          for(let i=0;i<tw;i++){const v=G.g[r+i]-sm;dot+=v*tz[j*tw+i];sv+=v*v;}}
+        const sc=dot/((Math.sqrt(sv)||1e-6)*tn);
+        if(sc>best.s)best={x,y,s:sc};
+      }
+    }
+    return best;
+  }
+
+  // 화면 그리기
+  function fitGeom(img){
+    const sc=Math.min(acv.width/img.width,acv.height/img.height);
+    return {sc,dx:(acv.width-img.width*sc)/2,dy:(acv.height-img.height*sc)/2,dw:img.width*sc,dh:img.height*sc};
+  }
+  function drawImg(img,shiftS){ // shiftS: S좌표계 평행이동(정렬용)
+    const f=fitGeom(img);
+    const k=f.dw/S; // S좌표 → 화면좌표 배율
+    actx.setTransform(1,0,0,1,0,0);
+    actx.fillStyle='#000';actx.fillRect(0,0,acv.width,acv.height);
+    const ox=shiftS?-shiftS.x*k:0, oy=shiftS?-shiftS.y*k:0;
+    actx.drawImage(img,f.dx+ox,f.dy+oy,f.dw,f.dh);
+    return f;
+  }
+  function sToDisp(f,x,y){const k=f.dw/S;return [f.dx+x*k,f.dy+y*k];}
+
+  function showState(){
+    if(aState==='pickAnchor'){
+      aMsg.style.display='block';
+      aMsg.textContent='기준 사진에서, 기준이 될 글씨(로고·제품명 등)를 짚어주세요';
+      acv.style.display='block';
+      document.getElementById('aActions').style.display='none';
+      document.getElementById('aResult').style.display='none';
+      stopBlink();
+      drawImg(imgA);
+      if(anchor){
+        const f=fitGeom(imgA);
+        const [px,py]=sToDisp(f,anchor.x,anchor.y);
+        const k=f.dw/S, r=anchor.w*k;
+        actx.strokeStyle='#2f6fed';actx.lineWidth=5;
+        actx.strokeRect(px,py,r,anchor.h*k);
+        document.getElementById('aActions').style.display='flex';
+      }
+    }
+  }
+
   async function aLoad(file){
     const img=await fileToImage(file).catch(()=>null);
     if(!img){alert('사진을 불러오지 못했어요.');return;}
     if(aTarget==='A'){
-      imgA=img;
+      imgA=img;anchor=null;
       acv.width=1100;acv.height=Math.min(1500,Math.round(1100*img.height/img.width));
-      acv.style.display='block';
       document.getElementById('btnA2').disabled=false;
       document.getElementById('btnA2Alb').disabled=false;
-    }else{
-      imgB=img;
-      ov={x:0,y:0,s:1,r:0};
-      document.getElementById('alignCtl').style.display='block';
+    }else{imgB=img;}
+    if(imgA&&imgB){aState='pickAnchor';showState();acv.scrollIntoView({behavior:'smooth',block:'center'});}
+    else{
+      acv.style.display='block';drawImg(imgA||imgB);
+      aMsg.style.display='block';
+      aMsg.textContent=imgA?'이제 ② 검사 제품을 찍어주세요':'먼저 ① 기준 제품을 찍어주세요';
     }
-    aDraw();
-    acv.scrollIntoView({behavior:'smooth',block:'center'});
   }
   const fileA=document.getElementById('fileA'),fileAAlb=document.getElementById('fileAAlb');
   fileA.onchange=e=>{if(e.target.files[0])aLoad(e.target.files[0]);e.target.value='';};
@@ -720,47 +779,143 @@
   document.getElementById('btnA2').onclick=()=>{aTarget='B';fileA.click();};
   document.getElementById('btnA2Alb').onclick=()=>{aTarget='B';fileAAlb.click();};
 
-  document.getElementById('aAlpha').oninput=e=>{aAlpha=e.target.value/100;aDraw();};
-  document.getElementById('btnBlink').onclick=()=>{
-    const btn=document.getElementById('btnBlink');
-    if(blinkTimer){clearInterval(blinkTimer);blinkTimer=null;blinkPhase=0;btn.textContent='⚡ 깜빡이';}
-    else{blinkTimer=setInterval(()=>{blinkPhase^=1;aDraw();},450);btn.textContent='⏸ 정지';}
-    aDraw();
-  };
+  // 기준 글씨 짚기 (탭)
+  let aDown=null;
+  acv.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];aDown={x:t.clientX,y:t.clientY};},{passive:false});
+  acv.addEventListener('touchend',e=>{
+    e.preventDefault();
+    if(aState!=='pickAnchor'||!aDown)return;
+    const t=e.changedTouches[0];
+    if(Math.hypot(t.clientX-aDown.x,t.clientY-aDown.y)>14)return; // 탭만 인정
+    const r=acv.getBoundingClientRect();
+    const cx=(t.clientX-r.left)*acv.width/r.width, cy=(t.clientY-r.top)*acv.height/r.height;
+    const f=fitGeom(imgA),k=f.dw/S;
+    const sx=(cx-f.dx)/k, sy=(cy-f.dy)/k;
+    const AW=90,AH=64; // 기준 패치 크기(S좌표)
+    anchor={x:Math.round(sx-AW/2),y:Math.round(sy-AH/2),w:AW,h:AH};
+    showState();
+  },{passive:false});
+  acv.addEventListener('click',e=>{
+    if(aState!=='pickAnchor')return;
+    const r=acv.getBoundingClientRect();
+    const cx=(e.clientX-r.left)*acv.width/r.width, cy=(e.clientY-r.top)*acv.height/r.height;
+    const f=fitGeom(imgA),k=f.dw/S;
+    const sx=(cx-f.dx)/k, sy=(cy-f.dy)/k;
+    anchor={x:Math.round(sx-45),y:Math.round(sy-32),w:90,h:64};
+    showState();
+  });
 
-  // 터치: 한 손가락 이동, 두 손가락 크기·회전
-  let aT={};
-  function tPos(t){const r=acv.getBoundingClientRect();
-    return {x:(t.clientX-r.left)*acv.width/r.width,y:(t.clientY-r.top)*acv.height/r.height};}
-  acv.addEventListener('touchstart',e=>{
-    e.preventDefault();
-    aT={};
-    for(const t of e.touches)aT[t.identifier]=tPos(t);
-  },{passive:false});
-  acv.addEventListener('touchmove',e=>{
-    e.preventDefault();
-    if(!imgB)return;
-    const ts=e.touches;
-    if(ts.length===1){
-      const p=tPos(ts[0]),o=aT[ts[0].identifier];
-      if(o){ov.x+=p.x-o.x;ov.y+=p.y-o.y;}
-      aT[ts[0].identifier]=p;
-    }else if(ts.length>=2){
-      const p1=tPos(ts[0]),p2=tPos(ts[1]);
-      const o1=aT[ts[0].identifier],o2=aT[ts[1].identifier];
-      if(o1&&o2){
-        const dN=Math.hypot(p2.x-p1.x,p2.y-p1.y),dO=Math.hypot(o2.x-o1.x,o2.y-o1.y);
-        if(dO>0)ov.s*=dN/dO;
-        ov.s=Math.min(5,Math.max(0.2,ov.s));
-        ov.r+=Math.atan2(p2.y-p1.y,p2.x-p1.x)-Math.atan2(o2.y-o1.y,o2.x-o1.x);
-        ov.x+=((p1.x+p2.x)-(o1.x+o2.x))/2;
-        ov.y+=((p1.y+p2.y)-(o1.y+o2.y))/2;
-      }
-      aT[ts[0].identifier]=p1;aT[ts[1].identifier]=p2;
+  // ── 분석 실행 ──
+  document.getElementById('btnAnalyze').onclick=()=>{
+    aMsg.textContent='분석 중… (몇 초 걸려요)';
+    document.getElementById('aActions').style.display='none';
+    setTimeout(runAnalysis,50);
+  };
+  function runAnalysis(){
+    gA=grayOf(imgA,S);gB=grayOf(imgB,S);
+    // 1) 기준 글씨 전역 탐색: 1/4 축소에서 대략 → 원래 크기에서 정밀
+    const Q=4;
+    const gA4=grayOf(imgA,Math.round(S/Q)),gB4=grayOf(imgB,Math.round(S/Q));
+    const t4=patchOf(gA4,Math.round(anchor.x/Q),Math.round(anchor.y/Q),Math.round(anchor.w/Q),Math.round(anchor.h/Q));
+    const c4=nccSearch(gB4,t4,Math.round(anchor.w/Q),Math.round(anchor.h/Q),0,0,gB4.W,gB4.H);
+    const tF=patchOf(gA,anchor.x,anchor.y,anchor.w,anchor.h);
+    const ex=c4.x*Q,ey=c4.y*Q;
+    const cF=nccSearch(gB,tF,anchor.w,anchor.h,ex-10,ey-10,ex+10,ey+10);
+    if(cF.s<0.35){
+      aMsg.textContent='검사 사진에서 기준 글씨를 찾지 못했어요. 더 또렷한 글씨를 짚거나, 비슷한 구도로 다시 찍어주세요.';
+      document.getElementById('aActions').style.display='flex';
+      return;
     }
-    aDraw();
-  },{passive:false});
-  acv.addEventListener('touchend',e=>{e.preventDefault();aT={};},{passive:false});
+    globalOff={x:cF.x-anchor.x,y:cF.y-anchor.y};
+    // 2) 내용 있는 블록 선정 (경사 에너지 상위)
+    const BL=52,ST=52;
+    const cand=[];
+    for(let y=0;y+BL<=gA.H;y+=ST)for(let x=0;x+BL<=gA.W;x+=ST){
+      // 기준 글씨 영역은 제외
+      if(x<anchor.x+anchor.w&&x+BL>anchor.x&&y<anchor.y+anchor.h&&y+BL>anchor.y)continue;
+      let e=0;
+      for(let j=2;j<BL;j+=2)for(let i=2;i<BL;i+=2){
+        const k=(y+j)*gA.W+(x+i);
+        e+=Math.abs(gA.g[k]-gA.g[k-2])+Math.abs(gA.g[k]-gA.g[k-2*gA.W]);
+      }
+      cand.push({x,y,e});
+    }
+    cand.sort((a,b)=>b.e-a.e);
+    const minE=cand.length?cand[0].e*0.18:0;
+    const blocks=cand.filter(c=>c.e>minE).slice(0,22);
+    // 3) 블록별 정합 → 잔여 어긋남 측정
+    const TH=4.5; // 허용 잔여(픽셀, S기준)
+    blocksRes=blocks.map(bk=>{
+      const tp=patchOf(gA,bk.x,bk.y,BL,BL);
+      const exx=bk.x+globalOff.x,eyy=bk.y+globalOff.y;
+      const m=nccSearch(gB,tp,BL,BL,exx-15,eyy-15,exx+15,eyy+15);
+      const rx=m.x-exx,ry=m.y-eyy,mag=Math.hypot(rx,ry);
+      let st='ok';
+      if(m.s<0.40)st='diff';
+      else if(mag>TH)st='shift';
+      return {bk,m,rx,ry,mag,st};
+    });
+    renderAnalysis();
+  }
+  function renderAnalysis(){
+    const f=drawImg(imgB);
+    const k=f.dw/S,BL=52;
+    // 기준 글씨 위치(파랑)
+    const [ax,ay]=sToDisp(f,anchor.x+globalOff.x,anchor.y+globalOff.y);
+    actx.strokeStyle='#2f6fed';actx.lineWidth=5;
+    actx.strokeRect(ax,ay,anchor.w*k,anchor.h*k);
+    let shifts=0,diffs=0,maxMag=0;
+    for(const r of blocksRes){
+      const [px,py]=sToDisp(f,r.m.x,r.m.y);
+      actx.lineWidth=4;
+      actx.strokeStyle=r.st==='ok'?'rgba(31,164,92,.9)':r.st==='shift'?'rgba(226,61,61,.95)':'rgba(240,160,30,.95)';
+      actx.strokeRect(px,py,BL*k,BL*k);
+      if(r.st==='shift'){
+        shifts++;maxMag=Math.max(maxMag,r.mag);
+        // 어긋난 방향 화살표
+        const [qx,qy]=sToDisp(f,r.bk.x+globalOff.x,r.bk.y+globalOff.y);
+        actx.beginPath();actx.moveTo(qx+BL*k/2,qy+BL*k/2);actx.lineTo(px+BL*k/2,py+BL*k/2);
+        actx.strokeStyle='#e23d3d';actx.lineWidth=5;actx.stroke();
+      }
+      if(r.st==='diff')diffs++;
+    }
+    const res=document.getElementById('aResult');
+    const v=document.getElementById('aVerdict'),dt=document.getElementById('aDetail');
+    res.style.display='block';
+    if(shifts===0&&diffs===0){
+      res.style.background='var(--pass)';
+      v.textContent='글씨 위치 정상 ✓';
+      dt.textContent='검사한 '+blocksRes.length+'곳 모두 기준과 일치해요';
+    }else{
+      res.style.background='var(--fail)';
+      const pct=(maxMag/S*100).toFixed(1);
+      v.textContent='글씨 밀림 감지 ⚠';
+      dt.textContent=(shifts?('빨간 영역 '+shifts+'곳이 밀렸어요 (최대 사진 폭의 '+pct+'%)'):'')
+        +(diffs?((shifts?' · ':'')+'주황 영역 '+diffs+'곳은 인쇄 내용이 달라요'):'');
+    }
+    aMsg.style.display='none';
+    res.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+
+  // 깜빡이: 자동 정렬된 두 사진을 번갈아 표시
+  function stopBlink(){
+    if(blinkTimer){clearInterval(blinkTimer);blinkTimer=null;blinkPhase=0;
+      const b=document.getElementById('btnBlink');if(b)b.textContent='⚡ 깜빡이';}
+  }
+  document.getElementById('btnBlink').onclick=()=>{
+    const b=document.getElementById('btnBlink');
+    if(blinkTimer){stopBlink();renderAnalysis();return;}
+    b.textContent='⏸ 정지';
+    blinkTimer=setInterval(()=>{
+      blinkPhase^=1;
+      if(blinkPhase)drawImg(imgB,globalOff); // 검사 사진을 기준에 맞춰 이동
+      else drawImg(imgA);
+    },450);
+  };
+  document.getElementById('btnAReset').onclick=()=>{
+    stopBlink();anchor=null;aState='pickAnchor';showState();
+    acv.scrollIntoView({behavior:'smooth',block:'center'});
+  };
   document.getElementById('btnSingle').onclick=()=>{
     // 새 사진마다 기준을 다시 짚음 (사진마다 조명이 다르므로)
     ref=null;
