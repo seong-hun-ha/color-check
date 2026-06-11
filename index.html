@@ -17,6 +17,13 @@
   h1{font-size:20px;font-weight:800;text-align:center;margin-bottom:4px}
   .sub{text-align:center;font-size:13px;color:var(--dim);margin-bottom:16px}
 
+  .tabs{display:flex;gap:8px;margin-bottom:6px}
+  .tabs button{
+    flex:1;padding:12px 4px;border-radius:12px;border:2px solid var(--line);
+    background:#fff;font-size:13.5px;font-weight:800;color:var(--dim);font-family:var(--sans);
+  }
+  .tabs button.on{border-color:var(--ink);color:var(--ink);background:#fff}
+
   .step{
     display:flex;align-items:center;gap:10px;margin:18px 2px 8px;
   }
@@ -120,13 +127,30 @@
 <h1>포장지 색깔 검사</h1>
 <div class="sub">사진 찍고, 색을 손가락으로 짚으면 끝!</div>
 
-<!-- 1단계 -->
+<div class="tabs">
+  <button id="tabSep" class="on">따로 찍기</button>
+  <button id="tabSingle">한 장 비교 ★조명에 강함</button>
+</div>
+
+<!-- 한 장 비교 모드 -->
+<div id="singleWrap" style="display:none">
+  <div class="step">
+    <div class="num">1</div>
+    <div><div class="txt">기준 제품과 검사 제품을<br>나란히 놓고 한 장에 찍기</div>
+    <div class="hint">같은 사진 안에서 비교하면 조명이 달라도 정확해요</div></div>
+  </div>
+  <button class="bigbtn" id="btnSingle">📷 같이 찍기</button>
+</div>
+
+<!-- 따로 찍기 모드 -->
+<div id="sepWrap">
 <div class="step" id="step1">
   <div class="num">1</div>
   <div><div class="txt">기준이 되는 제품 찍기</div>
   <div class="hint">색이 맞는 '정상 제품'을 먼저 찍어주세요</div></div>
 </div>
 <button class="bigbtn" id="btnRef">📷 기준 제품 찍기</button>
+</div>
 
 <div class="refcard" id="refcard">
   <div class="sw" id="refSw"></div>
@@ -134,7 +158,7 @@
   <button id="btnReRef">다시 정하기</button>
 </div>
 
-<!-- 2단계 -->
+<!-- 2단계 (따로 찍기 전용) -->
 <div id="step2wrap" style="display:none">
   <div class="step">
     <div class="num">2</div>
@@ -142,12 +166,13 @@
     <div class="hint">하나씩 찍어서 비교합니다</div></div>
   </div>
   <button class="bigbtn" id="btnTest">📷 검사 제품 찍기</button>
+</div>
 
-  <div class="strict" id="strict">
-    <button data-tol="2.0">엄격하게</button>
-    <button data-tol="3.5" class="on">보통</button>
-    <button data-tol="6.0">여유있게</button>
-  </div>
+<!-- 엄격도 (공통) -->
+<div class="strict" id="strict">
+  <button data-tol="2.0">엄격하게</button>
+  <button data-tol="3.5" class="on">보통</button>
+  <button data-tol="6.0">여유있게</button>
 </div>
 
 <!-- 사진 영역 -->
@@ -182,7 +207,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.3</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.4</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 
 <script>
@@ -252,7 +277,7 @@
     photo.style.display='block';
     document.getElementById('confirmBar').style.display='none';
     document.getElementById('result').style.display='none';
-    guide.textContent=mode==='ref'?'기준 색깔을 손가락으로 짚어주세요':'검사할 색깔을 손가락으로 짚어주세요';
+    guide.textContent=mode==='ref'?(single?'먼저 기준 제품의 색을 짚어주세요':'기준 색깔을 손가락으로 짚어주세요'):'검사할 색깔을 손가락으로 짚어주세요';
     photo.scrollIntoView({behavior:'smooth',block:'center'});
   }
   async function loadFile(file){
@@ -276,7 +301,15 @@
   fileInput.onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0]);e.target.value='';};
   document.getElementById('btnRef').onclick=()=>{mode='ref';fileInput.click();};
   document.getElementById('btnTest').onclick=()=>{mode='test';fileInput.click();};
-  document.getElementById('btnReRef').onclick=()=>{mode='ref';fileInput.click();};
+  document.getElementById('btnReRef').onclick=()=>{
+    if(single&&bufData){ // 같은 사진에서 기준만 다시 짚기
+      mode='ref';ref=null;
+      document.getElementById('refcard').style.display='none';
+      photo.style.display='block';
+      guide.textContent='기준 색깔을 다시 짚어주세요';
+      photo.scrollIntoView({behavior:'smooth',block:'center'});
+    }else{mode='ref';fileInput.click();}
+  };
 
   // ── 색 짚기 (확대경 + 11×11 평균) ──
   function canvasPos(cx,cy){
@@ -402,15 +435,23 @@
     if(mode==='ref'){
       ref={r,g,b,lab:rgb2lab(r,g,b)};
       document.getElementById('refSw').style.background=`rgb(${r},${g},${b})`;
-      document.getElementById('refTxt').textContent='색 번호 '+hex(r,g,b);
+      document.getElementById('refTxt').textContent=single?'이 사진 속 기준색':'색 번호 '+hex(r,g,b);
       document.getElementById('refcard').style.display='flex';
-      document.getElementById('step2wrap').style.display='block';
-      document.getElementById('btnRef').style.display='none';
-      document.getElementById('step1').style.display='none';
-      photo.style.display='none';
-      document.getElementById('step2wrap').scrollIntoView({behavior:'smooth'});
+      if(single){
+        // 같은 사진에서 바로 검사 색 짚기로 전환
+        mode='test';
+        guide.textContent='이제 검사할 제품의 색을 짚어주세요';
+        document.getElementById('btnSingle').textContent='📷 새로 찍기';
+        photo.scrollIntoView({behavior:'smooth',block:'center'});
+      }else{
+        document.getElementById('step2wrap').style.display='block';
+        document.getElementById('btnRef').style.display='none';
+        document.getElementById('step1').style.display='none';
+        photo.style.display='none';
+        document.getElementById('step2wrap').scrollIntoView({behavior:'smooth'});
+      }
     }else if(mode==='test'){
-      if(!ref){alert('먼저 기준 제품을 찍어주세요.');return;}
+      if(!ref){alert('먼저 기준 색을 짚어주세요.');return;}
       const lab=rgb2lab(r,g,b);
       const de=dE00(...lab,...ref.lab);
       const ok=de<=tol;
@@ -419,12 +460,17 @@
       res.className='result '+(ok?'pass':'fail');
       res.style.display='block';
       document.getElementById('resBig').textContent=ok?'합격 ✓':'불합격 ✕';
-      document.getElementById('resSmall').textContent=ok
+      document.getElementById('resSmall').textContent=(ok
         ?'기준색과 거의 같아요 (색 차이 '+de.toFixed(1)+')'
-        :'기준색과 차이가 커요 (색 차이 '+de.toFixed(1)+')';
+        :'기준색과 차이가 커요 (색 차이 '+de.toFixed(1)+')')
+        +(single?' · 같은 사진에서 다른 제품을 계속 짚을 수 있어요':'');
       document.getElementById('resRefSw').style.background=`rgb(${ref.r},${ref.g},${ref.b})`;
       document.getElementById('resCurSw').style.background=`rgb(${r},${g},${b})`;
-      photo.style.display='none';
+      if(single){
+        guide.textContent='다른 제품 색을 짚으면 계속 검사돼요';
+      }else{
+        photo.style.display='none';
+      }
       // 자동 저장
       records.push({
         label:'제품 '+(records.length+1),
@@ -436,6 +482,37 @@
       res.scrollIntoView({behavior:'smooth',block:'center'});
     }
   }
+
+  // ── 모드 탭 ──
+  let single=false;
+  const tabSep=document.getElementById('tabSep'),tabSingle=document.getElementById('tabSingle');
+  function setTab(s){
+    single=s;
+    tabSep.classList.toggle('on',!s);
+    tabSingle.classList.toggle('on',s);
+    document.getElementById('sepWrap').style.display=s?'none':'block';
+    document.getElementById('step2wrap').style.display=(!s&&ref)?'block':'none';
+    document.getElementById('singleWrap').style.display=s?'block':'none';
+    // 모드 전환 시 기준색·사진 초기화 (조명 조건이 다르므로)
+    ref=null;
+    document.getElementById('refcard').style.display='none';
+    document.getElementById('result').style.display='none';
+    photo.style.display='none';
+    if(!s){
+      document.getElementById('btnRef').style.display='block';
+      document.getElementById('step1').style.display='flex';
+    }
+    document.getElementById('btnSingle').textContent='📷 같이 찍기';
+  }
+  tabSep.onclick=()=>setTab(false);
+  tabSingle.onclick=()=>setTab(true);
+  document.getElementById('btnSingle').onclick=()=>{
+    // 새 사진마다 기준을 다시 짚음 (사진마다 조명이 다르므로)
+    ref=null;
+    document.getElementById('refcard').style.display='none';
+    mode='ref';
+    fileInput.click();
+  };
 
   // ── 엄격도 ──
   document.querySelectorAll('#strict button').forEach(btn=>{
@@ -485,6 +562,7 @@
     document.getElementById('step1').style.display='flex';
     document.getElementById('result').style.display='none';
     photo.style.display='none';
+    document.getElementById('btnSingle').textContent='📷 같이 찍기';
     window.scrollTo({top:0,behavior:'smooth'});
   };
 })();
