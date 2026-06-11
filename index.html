@@ -242,7 +242,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v2.1</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v2.2</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -871,7 +871,7 @@
     matches.push({bk:{x:anchor.x,y:anchor.y},m:cF,
       p:[anchor.x+anchor.w/2,anchor.y+anchor.h/2],
       q:[cF.x+anchor.w/2,cF.y+anchor.h/2],s:Math.max(cF.s,0.9),isAnchor:true});
-    // 4) 유사변환(이동+크기+회전) 강건 추정: 촬영 차이를 통째로 보정
+    // 4) 변환 추정: 원근(8자유도) 우선, 불안정하면 유사변환(4자유도)으로 폴백
     function fitSim(ms){
       let sw=0,pcx=0,pcy=0,qcx=0,qcy=0;
       for(const m of ms){const w=m.s;sw+=w;pcx+=w*m.p[0];pcy+=w*m.p[1];qcx+=w*m.q[0];qcy+=w*m.q[1];}
@@ -879,27 +879,99 @@
       let sxx=0,sa=0,sb=0;
       for(const m of ms){
         const w=m.s,px=m.p[0]-pcx,py=m.p[1]-pcy,qx=m.q[0]-qcx,qy=m.q[1]-qcy;
-        sxx+=w*(px*px+py*py);
-        sa+=w*(px*qx+py*qy);
-        sb+=w*(px*qy-py*qx);
+        sxx+=w*(px*px+py*py);sa+=w*(px*qx+py*qy);sb+=w*(px*qy-py*qx);
       }
       const a=sa/sxx,b=sb/sxx;
       return {a,b,tx:qcx-(a*pcx-b*pcy),ty:qcy-(b*pcx+a*pcy)};
     }
     function T(tr,p){return [tr.a*p[0]-tr.b*p[1]+tr.tx, tr.b*p[0]+tr.a*p[1]+tr.ty];}
+    function mat3mul(A,B){
+      const C=new Array(9);
+      for(let i=0;i<3;i++)for(let j=0;j<3;j++){
+        let v=0;for(let k=0;k<3;k++)v+=A[i*3+k]*B[k*3+j];C[i*3+j]=v;
+      }
+      return C;
+    }
+    function gauss(A,b,n){
+      const M=A.map((r,i)=>[...r,b[i]]);
+      for(let c=0;c<n;c++){
+        let piv=c;
+        for(let r=c+1;r<n;r++)if(Math.abs(M[r][c])>Math.abs(M[piv][c]))piv=r;
+        if(Math.abs(M[piv][c])<1e-10)return null;
+        [M[c],M[piv]]=[M[piv],M[c]];
+        for(let r=0;r<n;r++){
+          if(r===c)continue;
+          const f=M[r][c]/M[c][c];
+          for(let k=c;k<=n;k++)M[r][k]-=f*M[c][k];
+        }
+      }
+      return M.map((r,i)=>r[n]/r[i]);
+    }
+    function fitHomog(ms){
+      // Hartley 정규화로 수치 안정화
+      function norm(pts){
+        let cx=0,cy=0;for(const p of pts){cx+=p[0];cy+=p[1];}cx/=pts.length;cy/=pts.length;
+        let d=0;for(const p of pts)d+=Math.hypot(p[0]-cx,p[1]-cy);d/=pts.length;
+        const sc=Math.SQRT2/(d||1);
+        return {sc,cx,cy,f:p=>[(p[0]-cx)*sc,(p[1]-cy)*sc]};
+      }
+      const Np=norm(ms.map(m=>m.p)),Nq=norm(ms.map(m=>m.q));
+      const A=Array.from({length:8},()=>new Float64Array(8));
+      const B=new Float64Array(8);
+      for(const m of ms){
+        const w=m.s,[x,y]=Np.f(m.p),[u,v]=Nq.f(m.q);
+        const rows=[[[x,y,1,0,0,0,-x*u,-y*u],u],[[0,0,0,x,y,1,-x*v,-y*v],v]];
+        for(const [r,t] of rows)
+          for(let a=0;a<8;a++){B[a]+=w*r[a]*t;for(let c=0;c<8;c++)A[a][c]+=w*r[a]*r[c];}
+      }
+      const h=gauss(A,B,8);
+      if(!h)return null;
+      const Hn=[h[0],h[1],h[2],h[3],h[4],h[5],h[6],h[7],1];
+      const Tp=[Np.sc,0,-Np.sc*Np.cx, 0,Np.sc,-Np.sc*Np.cy, 0,0,1];
+      const Tqi=[1/Nq.sc,0,Nq.cx, 0,1/Nq.sc,Nq.cy, 0,0,1];
+      return mat3mul(mat3mul(Tqi,Hn),Tp);
+    }
+    function applyH(H,p){
+      const w=H[6]*p[0]+H[7]*p[1]+H[8];
+      return [(H[0]*p[0]+H[1]*p[1]+H[2])/w,(H[3]*p[0]+H[4]*p[1]+H[5])/w];
+    }
+    function spreadOK(ms){
+      let cx=0,cy=0;for(const m of ms){cx+=m.p[0];cy+=m.p[1];}cx/=ms.length;cy/=ms.length;
+      let sx=0,sy=0;
+      for(const m of ms){sx+=(m.p[0]-cx)**2;sy+=(m.p[1]-cy)**2;}
+      return Math.sqrt(sx/ms.length)>55&&Math.sqrt(sy/ms.length)>55;
+    }
     let good=matches.filter(m=>m.s>0.45);
     if(good.length<4)good=matches.filter(m=>m.s>0.3);
+    // 유사변환 (항상 추정: 폴백 + 구도 안내용)
     let tr=fitSim(good);
-    // 이상치(진짜 밀린 글씨) 제외하고 재추정 ×2
     for(let it=0;it<2;it++){
       const inl=good.filter(m=>{const t=T(tr,m.p);return Math.hypot(t[0]-m.q[0],t[1]-m.q[1])<6||m.isAnchor;});
       if(inl.length>=4)tr=fitSim(inl);
+    }
+    // 원근 변환 시도
+    let H=null;
+    if(good.length>=8&&spreadOK(good)){
+      H=fitHomog(good);
+      for(let it=0;H&&it<2;it++){
+        const inl=good.filter(m=>{const t=applyH(H,m.p);return Math.hypot(t[0]-m.q[0],t[1]-m.q[1])<6||m.isAnchor;});
+        if(inl.length>=8&&spreadOK(inl)){const H2=fitHomog(inl);if(H2)H=H2;}
+        else break;
+      }
+    }
+    let mapFn=p=>T(tr,p);
+    if(H){
+      // 원근이 실제로 더 잘 맞을 때만 채택
+      const err=f=>{let e=0,c=0;
+        for(const m of good){const t=f(m.p);const d=Math.hypot(t[0]-m.q[0],t[1]-m.q[1]);if(d<12){e+=d;c++;}}
+        return c?e/c:99;};
+      if(err(p=>applyH(H,p))<err(mapFn)*0.85)mapFn=p=>applyH(H,p);
     }
     const scale=Math.hypot(tr.a,tr.b),rotDeg=Math.atan2(tr.b,tr.a)*180/Math.PI;
     // 5) 보정 후 잔여 어긋남으로 판정
     const TH=4.5;
     blocksRes=matches.filter(m=>!m.isAnchor).map(m=>{
-      const t=T(tr,m.p);
+      const t=mapFn(m.p);
       const mag=Math.hypot(t[0]-m.q[0],t[1]-m.q[1]);
       let st='ok';
       if(m.s<0.35)st='diff';
