@@ -241,7 +241,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.8</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.9</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -478,6 +478,23 @@
   function pick(x,y){
     if(isMulti()){
       if(judged){multi=[];judged=false;restorePhoto();}
+      // 이미 선택된 영역을 다시 짚으면 선택 취소
+      const bx=Math.min(buf.width-1,Math.max(0,Math.round(x*bufScale)));
+      const by=Math.min(buf.height-1,Math.max(0,Math.round(y*bufScale)));
+      const tp=by*buf.width+bx;
+      const hit=multi.findIndex(m=>m.mask.includes(tp));
+      if(hit>=0){
+        multi.splice(hit,1);
+        drawMulti(multi);
+        if(multi.length){
+          guide.textContent=multi.length+'개 선택됨 · 계속 짚거나 모두 검사를 누르세요';
+          document.getElementById('btnUse').textContent='✓ '+multi.length+'개 모두 검사';
+        }else{
+          confirmBar.style.display='none';
+          guide.textContent='검사할 색깔을 짚어주세요';
+        }
+        return;
+      }
       const sel=floodSelect(x,y);
       if(!sel){guide.textContent='영역을 못 찾았어요. 색이 있는 부분을 짚어주세요';return;}
       multi.push(sel);
