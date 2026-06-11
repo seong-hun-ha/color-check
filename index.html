@@ -170,6 +170,7 @@
     <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
       <button id="btnBlink" style="border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;background:rgba(255,255,255,.2);color:#fff;font-family:var(--sans)">⚡ 깜빡이</button>
       <button id="btnAReset" style="border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;background:rgba(255,255,255,.2);color:#fff;font-family:var(--sans)">기준 다시 짚기</button>
+      <button id="btnANew" style="border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;background:rgba(255,255,255,.2);color:#fff;font-family:var(--sans)">새로 찍기</button>
     </div>
   </div>
 </div>
@@ -241,7 +242,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.9</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v2.0</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -911,6 +912,7 @@
         +(diffs?((shifts?' · ':'')+'주황 영역 '+diffs+'곳은 인쇄 내용이 달라요'):'');
     }
     aMsg.style.display='none';
+    aState='done';
     res.scrollIntoView({behavior:'smooth',block:'center'});
   }
 
@@ -930,8 +932,27 @@
     },450);
   };
   document.getElementById('btnAReset').onclick=()=>{
-    stopBlink();anchor=null;aState='pickAnchor';showState();
+    stopBlink();
+    anchor=null;globalOff=null;blocksRes=null;
+    document.getElementById('aResult').style.display='none';
+    aState='pickAnchor';
+    showState();
     acv.scrollIntoView({behavior:'smooth',block:'center'});
+  };
+  function alignFullReset(){
+    stopBlink();
+    imgA=null;imgB=null;anchor=null;globalOff=null;blocksRes=null;
+    aState='needA';
+    acv.style.display='none';
+    aMsg.style.display='none';
+    document.getElementById('aActions').style.display='none';
+    document.getElementById('aResult').style.display='none';
+    document.getElementById('btnA2').disabled=true;
+    document.getElementById('btnA2Alb').disabled=true;
+  }
+  document.getElementById('btnANew').onclick=()=>{
+    alignFullReset();
+    window.scrollTo({top:0,behavior:'smooth'});
   };
   document.getElementById('btnSingle').onclick=()=>{
     // 새 사진마다 기준을 다시 짚음 (사진마다 조명이 다르므로)
@@ -990,6 +1011,7 @@
     document.getElementById('result').style.display='none';
     photo.style.display='none';
     document.getElementById('btnSingle').textContent='📷 같이 찍기';
+    if(typeof alignFullReset==='function')alignFullReset();
     window.scrollTo({top:0,behavior:'smooth'});
   };
 })();
