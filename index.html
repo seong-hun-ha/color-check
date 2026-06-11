@@ -242,7 +242,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v2.0</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v2.1</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -831,25 +831,24 @@
   };
   function runAnalysis(){
     gA=grayOf(imgA,S);gB=grayOf(imgB,S);
-    // 1) 기준 글씨 전역 탐색: 1/4 축소에서 대략 → 원래 크기에서 정밀
+    // 1) 기준 글씨 전역 탐색: 1/4 축소 → 정밀
     const Q=4;
     const gA4=grayOf(imgA,Math.round(S/Q)),gB4=grayOf(imgB,Math.round(S/Q));
     const t4=patchOf(gA4,Math.round(anchor.x/Q),Math.round(anchor.y/Q),Math.round(anchor.w/Q),Math.round(anchor.h/Q));
     const c4=nccSearch(gB4,t4,Math.round(anchor.w/Q),Math.round(anchor.h/Q),0,0,gB4.W,gB4.H);
     const tF=patchOf(gA,anchor.x,anchor.y,anchor.w,anchor.h);
-    const ex=c4.x*Q,ey=c4.y*Q;
-    const cF=nccSearch(gB,tF,anchor.w,anchor.h,ex-10,ey-10,ex+10,ey+10);
-    if(cF.s<0.35){
+    const ex0=c4.x*Q,ey0=c4.y*Q;
+    const cF=nccSearch(gB,tF,anchor.w,anchor.h,ex0-12,ey0-12,ex0+12,ey0+12);
+    if(cF.s<0.32){
       aMsg.textContent='검사 사진에서 기준 글씨를 찾지 못했어요. 더 또렷한 글씨를 짚거나, 비슷한 구도로 다시 찍어주세요.';
       document.getElementById('aActions').style.display='flex';
       return;
     }
     globalOff={x:cF.x-anchor.x,y:cF.y-anchor.y};
-    // 2) 내용 있는 블록 선정 (경사 에너지 상위)
-    const BL=52,ST=52;
+    // 2) 내용 블록 선정
+    const BL=52,ST=44;
     const cand=[];
     for(let y=0;y+BL<=gA.H;y+=ST)for(let x=0;x+BL<=gA.W;x+=ST){
-      // 기준 글씨 영역은 제외
       if(x<anchor.x+anchor.w&&x+BL>anchor.x&&y<anchor.y+anchor.h&&y+BL>anchor.y)continue;
       let e=0;
       for(let j=2;j<BL;j+=2)for(let i=2;i<BL;i+=2){
@@ -860,25 +859,60 @@
     }
     cand.sort((a,b)=>b.e-a.e);
     const minE=cand.length?cand[0].e*0.18:0;
-    const blocks=cand.filter(c=>c.e>minE).slice(0,22);
-    // 3) 블록별 정합 → 잔여 어긋남 측정
-    const TH=4.5; // 허용 잔여(픽셀, S기준)
-    blocksRes=blocks.map(bk=>{
+    const blocks=cand.filter(c=>c.e>minE).slice(0,26);
+    // 3) 블록별 매칭 (넓은 탐색창: 확대·회전 차이 흡수)
+    const matches=blocks.map(bk=>{
       const tp=patchOf(gA,bk.x,bk.y,BL,BL);
       const exx=bk.x+globalOff.x,eyy=bk.y+globalOff.y;
-      const m=nccSearch(gB,tp,BL,BL,exx-15,eyy-15,exx+15,eyy+15);
-      const rx=m.x-exx,ry=m.y-eyy,mag=Math.hypot(rx,ry);
-      let st='ok';
-      if(m.s<0.40)st='diff';
-      else if(mag>TH)st='shift';
-      return {bk,m,rx,ry,mag,st};
+      const m=nccSearch(gB,tp,BL,BL,exx-22,eyy-22,exx+22,eyy+22);
+      return {bk,m,p:[bk.x+BL/2,bk.y+BL/2],q:[m.x+BL/2,m.y+BL/2],s:m.s};
     });
-    renderAnalysis();
+    // 기준 글씨도 강한 대응점으로 포함
+    matches.push({bk:{x:anchor.x,y:anchor.y},m:cF,
+      p:[anchor.x+anchor.w/2,anchor.y+anchor.h/2],
+      q:[cF.x+anchor.w/2,cF.y+anchor.h/2],s:Math.max(cF.s,0.9),isAnchor:true});
+    // 4) 유사변환(이동+크기+회전) 강건 추정: 촬영 차이를 통째로 보정
+    function fitSim(ms){
+      let sw=0,pcx=0,pcy=0,qcx=0,qcy=0;
+      for(const m of ms){const w=m.s;sw+=w;pcx+=w*m.p[0];pcy+=w*m.p[1];qcx+=w*m.q[0];qcy+=w*m.q[1];}
+      pcx/=sw;pcy/=sw;qcx/=sw;qcy/=sw;
+      let sxx=0,sa=0,sb=0;
+      for(const m of ms){
+        const w=m.s,px=m.p[0]-pcx,py=m.p[1]-pcy,qx=m.q[0]-qcx,qy=m.q[1]-qcy;
+        sxx+=w*(px*px+py*py);
+        sa+=w*(px*qx+py*qy);
+        sb+=w*(px*qy-py*qx);
+      }
+      const a=sa/sxx,b=sb/sxx;
+      return {a,b,tx:qcx-(a*pcx-b*pcy),ty:qcy-(b*pcx+a*pcy)};
+    }
+    function T(tr,p){return [tr.a*p[0]-tr.b*p[1]+tr.tx, tr.b*p[0]+tr.a*p[1]+tr.ty];}
+    let good=matches.filter(m=>m.s>0.45);
+    if(good.length<4)good=matches.filter(m=>m.s>0.3);
+    let tr=fitSim(good);
+    // 이상치(진짜 밀린 글씨) 제외하고 재추정 ×2
+    for(let it=0;it<2;it++){
+      const inl=good.filter(m=>{const t=T(tr,m.p);return Math.hypot(t[0]-m.q[0],t[1]-m.q[1])<6||m.isAnchor;});
+      if(inl.length>=4)tr=fitSim(inl);
+    }
+    const scale=Math.hypot(tr.a,tr.b),rotDeg=Math.atan2(tr.b,tr.a)*180/Math.PI;
+    // 5) 보정 후 잔여 어긋남으로 판정
+    const TH=4.5;
+    blocksRes=matches.filter(m=>!m.isAnchor).map(m=>{
+      const t=T(tr,m.p);
+      const mag=Math.hypot(t[0]-m.q[0],t[1]-m.q[1]);
+      let st='ok';
+      if(m.s<0.35)st='diff';
+      else if(mag>TH)st='shift';
+      return {bk:m.bk,m:m.m,mag,st,exp:t};
+    });
+    aTrans=tr;
+    renderAnalysis(scale,rotDeg);
   }
-  function renderAnalysis(){
+  let aTrans=null;
+  function renderAnalysis(scale,rotDeg){
     const f=drawImg(imgB);
     const k=f.dw/S,BL=52;
-    // 기준 글씨 위치(파랑)
     const [ax,ay]=sToDisp(f,anchor.x+globalOff.x,anchor.y+globalOff.y);
     actx.strokeStyle='#2f6fed';actx.lineWidth=5;
     actx.strokeRect(ax,ay,anchor.w*k,anchor.h*k);
@@ -890,8 +924,7 @@
       actx.strokeRect(px,py,BL*k,BL*k);
       if(r.st==='shift'){
         shifts++;maxMag=Math.max(maxMag,r.mag);
-        // 어긋난 방향 화살표
-        const [qx,qy]=sToDisp(f,r.bk.x+globalOff.x,r.bk.y+globalOff.y);
+        const [qx,qy]=sToDisp(f,r.exp[0]-BL/2,r.exp[1]-BL/2);
         actx.beginPath();actx.moveTo(qx+BL*k/2,qy+BL*k/2);actx.lineTo(px+BL*k/2,py+BL*k/2);
         actx.strokeStyle='#e23d3d';actx.lineWidth=5;actx.stroke();
       }
@@ -900,16 +933,18 @@
     const res=document.getElementById('aResult');
     const v=document.getElementById('aVerdict'),dt=document.getElementById('aDetail');
     res.style.display='block';
+    const poseNote=(Math.abs(scale-1)>0.10||Math.abs(rotDeg)>5)
+      ?' · 두 사진의 구도 차이가 커요. 더 비슷하게 찍으면 정확해져요':'';
     if(shifts===0&&diffs===0){
       res.style.background='var(--pass)';
       v.textContent='글씨 위치 정상 ✓';
-      dt.textContent='검사한 '+blocksRes.length+'곳 모두 기준과 일치해요';
+      dt.textContent='검사한 '+blocksRes.length+'곳 모두 기준과 일치해요'+poseNote;
     }else{
       res.style.background='var(--fail)';
       const pct=(maxMag/S*100).toFixed(1);
       v.textContent='글씨 밀림 감지 ⚠';
       dt.textContent=(shifts?('빨간 영역 '+shifts+'곳이 밀렸어요 (최대 사진 폭의 '+pct+'%)'):'')
-        +(diffs?((shifts?' · ':'')+'주황 영역 '+diffs+'곳은 인쇄 내용이 달라요'):'');
+        +(diffs?((shifts?' · ':'')+'주황 영역 '+diffs+'곳은 인쇄가 달라요'):'')+poseNote;
     }
     aMsg.style.display='none';
     aState='done';
