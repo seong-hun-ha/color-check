@@ -130,6 +130,7 @@
 <div class="tabs">
   <button id="tabSep" class="on">따로 찍기</button>
   <button id="tabSingle">한 장 비교 ★조명에 강함</button>
+  <button id="tabAlign">글씨 위치</button>
 </div>
 
 <!-- 한 장 비교 모드 -->
@@ -141,6 +142,34 @@
   </div>
   <button class="bigbtn" id="btnSingle">📷 같이 찍기</button>
 <button class="bigbtn gray" id="btnSingleAlbum" style="margin-top:8px">🖼 앨범에서 불러오기</button>
+</div>
+
+<!-- 글씨 위치 비교 모드 -->
+<div id="alignWrap" style="display:none">
+  <div class="step">
+    <div class="num">1</div>
+    <div><div class="txt">기준 제품과 검사 제품을<br>각각 비슷한 구도로 찍기</div>
+    <div class="hint">두 사진을 겹쳐서 글씨 밀림을 확인해요</div></div>
+  </div>
+  <div class="btnrow">
+    <button class="bigbtn" id="btnA1">📷 ① 기준</button>
+    <button class="bigbtn gray" id="btnA1Alb" style="flex:.45">🖼 앨범</button>
+  </div>
+  <div class="btnrow">
+    <button class="bigbtn" id="btnA2" disabled>📷 ② 검사</button>
+    <button class="bigbtn gray" id="btnA2Alb" style="flex:.45" disabled>🖼 앨범</button>
+  </div>
+  <canvas id="acv" style="width:100%;border-radius:16px;background:#000;touch-action:none;display:none;margin-top:10px"></canvas>
+  <div id="alignCtl" style="display:none">
+    <div style="font-size:13px;color:var(--dim);line-height:1.6;margin-top:8px;text-align:center">
+      손가락으로 <b style="color:var(--ink)">검사 사진을 끌어서</b> 포장지 테두리를 겹치세요<br>(두 손가락으로 크기·회전 조절)<br>겹쳤는데 <b style="color:var(--fail)">글씨만 두 겹</b>으로 보이면 밀린 것!
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+      <span style="font-size:12px;color:var(--dim);flex:none">투명도</span>
+      <input type="range" id="aAlpha" min="10" max="90" value="50" style="flex:1">
+      <button class="bigbtn gray" id="btnBlink" style="flex:none;padding:10px 14px;font-size:13px">⚡ 깜빡이</button>
+    </div>
+  </div>
 </div>
 
 <!-- 따로 찍기 모드 -->
@@ -210,9 +239,11 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.5</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.6</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
+<input type="file" id="fileA" accept="image/*" capture="environment">
+<input type="file" id="fileAAlb" accept="image/*">
 
 <script>
 (function(){
@@ -518,6 +549,124 @@
   }
   tabSep.onclick=()=>setTab(false);
   tabSingle.onclick=()=>setTab(true);
+
+  // ── 글씨 위치 비교 ──
+  const tabAlign=document.getElementById('tabAlign');
+  const alignWrap=document.getElementById('alignWrap');
+  const acv=document.getElementById('acv'),actx=acv.getContext('2d');
+  let imgA=null,imgB=null,ov={x:0,y:0,s:1,r:0},aAlpha=0.5,blinkTimer=null,blinkPhase=0,aTarget='A';
+
+  function setAlignTab(on){
+    alignWrap.style.display=on?'block':'none';
+    document.getElementById('strict').style.display=on?'none':'flex';
+    tabAlign.classList.toggle('on',on);
+    if(!on&&blinkTimer){clearInterval(blinkTimer);blinkTimer=null;blinkPhase=0;
+      document.getElementById('btnBlink').textContent='⚡ 깜빡이';}
+  }
+  tabAlign.onclick=()=>{
+    setTab(false); // 다른 모드 정리
+    document.getElementById('sepWrap').style.display='none';
+    document.getElementById('btnRef').style.display='none';
+    document.getElementById('step1').style.display='none';
+    tabSep.classList.remove('on');tabSingle.classList.remove('on');
+    setAlignTab(true);
+  };
+  const _setTab=setTab;
+  setTab=function(s){setAlignTab(false);_setTab(s);};
+
+  async function fileToImage(file){
+    try{return await createImageBitmap(file);}catch(e){}
+    const du=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(file);});
+    return await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=du;});
+  }
+  function aDraw(){
+    if(!imgA)return;
+    const w=acv.width,h=acv.height;
+    actx.setTransform(1,0,0,1,0,0);
+    actx.fillStyle='#000';actx.fillRect(0,0,w,h);
+    const fit=img=>{const sc=Math.min(w/img.width,h/img.height);
+      return ()=>actx.drawImage(img,(w-img.width*sc)/2,(h-img.height*sc)/2,img.width*sc,img.height*sc);};
+    const showA=!blinkTimer||blinkPhase===0;
+    const showB=imgB&&(!blinkTimer||blinkPhase===1);
+    if(showA){actx.globalAlpha=1;fit(imgA)();}
+    if(showB){
+      actx.save();
+      actx.globalAlpha=blinkTimer?1:aAlpha;
+      actx.translate(w/2+ov.x,h/2+ov.y);
+      actx.rotate(ov.r);
+      actx.scale(ov.s,ov.s);
+      actx.translate(-w/2,-h/2);
+      fit(imgB)();
+      actx.restore();
+    }
+    actx.globalAlpha=1;
+  }
+  async function aLoad(file){
+    const img=await fileToImage(file).catch(()=>null);
+    if(!img){alert('사진을 불러오지 못했어요.');return;}
+    if(aTarget==='A'){
+      imgA=img;
+      acv.width=1100;acv.height=Math.min(1500,Math.round(1100*img.height/img.width));
+      acv.style.display='block';
+      document.getElementById('btnA2').disabled=false;
+      document.getElementById('btnA2Alb').disabled=false;
+    }else{
+      imgB=img;
+      ov={x:0,y:0,s:1,r:0};
+      document.getElementById('alignCtl').style.display='block';
+    }
+    aDraw();
+    acv.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+  const fileA=document.getElementById('fileA'),fileAAlb=document.getElementById('fileAAlb');
+  fileA.onchange=e=>{if(e.target.files[0])aLoad(e.target.files[0]);e.target.value='';};
+  fileAAlb.onchange=e=>{if(e.target.files[0])aLoad(e.target.files[0]);e.target.value='';};
+  document.getElementById('btnA1').onclick=()=>{aTarget='A';fileA.click();};
+  document.getElementById('btnA1Alb').onclick=()=>{aTarget='A';fileAAlb.click();};
+  document.getElementById('btnA2').onclick=()=>{aTarget='B';fileA.click();};
+  document.getElementById('btnA2Alb').onclick=()=>{aTarget='B';fileAAlb.click();};
+
+  document.getElementById('aAlpha').oninput=e=>{aAlpha=e.target.value/100;aDraw();};
+  document.getElementById('btnBlink').onclick=()=>{
+    const btn=document.getElementById('btnBlink');
+    if(blinkTimer){clearInterval(blinkTimer);blinkTimer=null;blinkPhase=0;btn.textContent='⚡ 깜빡이';}
+    else{blinkTimer=setInterval(()=>{blinkPhase^=1;aDraw();},450);btn.textContent='⏸ 정지';}
+    aDraw();
+  };
+
+  // 터치: 한 손가락 이동, 두 손가락 크기·회전
+  let aT={};
+  function tPos(t){const r=acv.getBoundingClientRect();
+    return {x:(t.clientX-r.left)*acv.width/r.width,y:(t.clientY-r.top)*acv.height/r.height};}
+  acv.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    aT={};
+    for(const t of e.touches)aT[t.identifier]=tPos(t);
+  },{passive:false});
+  acv.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    if(!imgB)return;
+    const ts=e.touches;
+    if(ts.length===1){
+      const p=tPos(ts[0]),o=aT[ts[0].identifier];
+      if(o){ov.x+=p.x-o.x;ov.y+=p.y-o.y;}
+      aT[ts[0].identifier]=p;
+    }else if(ts.length>=2){
+      const p1=tPos(ts[0]),p2=tPos(ts[1]);
+      const o1=aT[ts[0].identifier],o2=aT[ts[1].identifier];
+      if(o1&&o2){
+        const dN=Math.hypot(p2.x-p1.x,p2.y-p1.y),dO=Math.hypot(o2.x-o1.x,o2.y-o1.y);
+        if(dO>0)ov.s*=dN/dO;
+        ov.s=Math.min(5,Math.max(0.2,ov.s));
+        ov.r+=Math.atan2(p2.y-p1.y,p2.x-p1.x)-Math.atan2(o2.y-o1.y,o2.x-o1.x);
+        ov.x+=((p1.x+p2.x)-(o1.x+o2.x))/2;
+        ov.y+=((p1.y+p2.y)-(o1.y+o2.y))/2;
+      }
+      aT[ts[0].identifier]=p1;aT[ts[1].identifier]=p2;
+    }
+    aDraw();
+  },{passive:false});
+  acv.addEventListener('touchend',e=>{e.preventDefault();aT={};},{passive:false});
   document.getElementById('btnSingle').onclick=()=>{
     // 새 사진마다 기준을 다시 짚음 (사진마다 조명이 다르므로)
     ref=null;
