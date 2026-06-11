@@ -140,6 +140,7 @@
     <div class="hint">같은 사진 안에서 비교하면 조명이 달라도 정확해요</div></div>
   </div>
   <button class="bigbtn" id="btnSingle">📷 같이 찍기</button>
+<button class="bigbtn gray" id="btnSingleAlbum" style="margin-top:8px">🖼 앨범에서 불러오기</button>
 </div>
 
 <!-- 따로 찍기 모드 -->
@@ -150,6 +151,7 @@
   <div class="hint">색이 맞는 '정상 제품'을 먼저 찍어주세요</div></div>
 </div>
 <button class="bigbtn" id="btnRef">📷 기준 제품 찍기</button>
+<button class="bigbtn gray" id="btnRefAlbum" style="margin-top:8px">🖼 앨범에서 불러오기</button>
 </div>
 
 <div class="refcard" id="refcard">
@@ -166,6 +168,7 @@
     <div class="hint">하나씩 찍어서 비교합니다</div></div>
   </div>
   <button class="bigbtn" id="btnTest">📷 검사 제품 찍기</button>
+<button class="bigbtn gray" id="btnTestAlbum" style="margin-top:8px">🖼 앨범에서 불러오기</button>
 </div>
 
 <!-- 엄격도 (공통) -->
@@ -207,8 +210,9 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.4</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.5</div>
 <input type="file" id="file" accept="image/*" capture="environment">
+<input type="file" id="fileAlbum" accept="image/*">
 
 <script>
 (function(){
@@ -299,6 +303,14 @@
     }
   }
   fileInput.onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0]);e.target.value='';};
+  const fileAlbum=document.getElementById('fileAlbum');
+  fileAlbum.onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0]);e.target.value='';};
+  document.getElementById('btnRefAlbum').onclick=()=>{mode='ref';fileAlbum.click();};
+  document.getElementById('btnTestAlbum').onclick=()=>{mode='test';fileAlbum.click();};
+  document.getElementById('btnSingleAlbum').onclick=()=>{
+    ref=null;document.getElementById('refcard').style.display='none';
+    mode='ref';fileAlbum.click();
+  };
   document.getElementById('btnRef').onclick=()=>{mode='ref';fileInput.click();};
   document.getElementById('btnTest').onclick=()=>{mode='test';fileInput.click();};
   document.getElementById('btnReRef').onclick=()=>{
