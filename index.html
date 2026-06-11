@@ -239,7 +239,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.6</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v1.7</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -310,6 +310,7 @@
     bufData=bufCtx.getImageData(0,0,buf.width,buf.height);
     bufScale=buf.width/w;
     photo.style.display='block';
+    multi=[];judged=false;pending=null;
     document.getElementById('confirmBar').style.display='none';
     document.getElementById('result').style.display='none';
     guide.textContent=mode==='ref'?(single?'먼저 기준 제품의 색을 짚어주세요':'기준 색깔을 손가락으로 짚어주세요'):'검사할 색깔을 손가락으로 짚어주세요';
@@ -404,7 +405,10 @@
       if(py<H-1&&!visited[p+W]){visited[p+W]=1;stack.push(p+W);}
     }
     if(cnt<25)return null; // 영역이 너무 작으면 실패 처리
-    return {r:Math.round(r/cnt),g:Math.round(g/cnt),b:Math.round(b/cnt),mask,W,H,cnt};
+    let cxs=0,cys=0;
+    for(const p of mask){cxs+=p%W;cys+=(p-p%W)/W;}
+    return {r:Math.round(r/cnt),g:Math.round(g/cnt),b:Math.round(b/cnt),mask,W,H,cnt,
+            cx:cxs/cnt/bufScale,cy:cys/cnt/bufScale};
   }
   // 선택 영역을 파랗게 잠깐 표시
   function showRegion(sel){
@@ -424,6 +428,39 @@
   }
   function restorePhoto(){ctx.drawImage(orig,0,0);}
 
+  // 여러 영역을 번호와 함께 그림 (verdicts: 판정 결과 배열, 없으면 파란색)
+  function drawMulti(list,verdicts){
+    if(!list.length){restorePhoto();return;}
+    const W=list[0].W,H=list[0].H;
+    const mcv=document.createElement('canvas');
+    mcv.width=W;mcv.height=H;
+    const mctx=mcv.getContext('2d');
+    const im=mctx.createImageData(W,H);
+    list.forEach((sel,i)=>{
+      const col=verdicts?(verdicts[i]?[31,164,92]:[226,61,61]):[47,111,237];
+      for(const p of sel.mask){
+        const k=p*4;
+        im.data[k]=col[0];im.data[k+1]=col[1];im.data[k+2]=col[2];im.data[k+3]=130;
+      }
+    });
+    mctx.putImageData(im,0,0);
+    ctx.drawImage(orig,0,0);
+    ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(mcv,0,0,cv.width,cv.height);
+    // 번호 표시
+    const R=Math.max(18,cv.width*0.022);
+    list.forEach((sel,i)=>{
+      ctx.beginPath();ctx.arc(sel.cx,sel.cy,R,0,7);
+      ctx.fillStyle=verdicts?(verdicts[i]?'#1fa45c':'#e23d3d'):'#2f6fed';
+      ctx.fill();
+      ctx.lineWidth=R*0.15;ctx.strokeStyle='#fff';ctx.stroke();
+      ctx.fillStyle='#fff';
+      ctx.font='bold '+(R*1.1)+'px sans-serif';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(String(i+1),sel.cx,sel.cy+R*0.05);
+    });
+  }
+
   let lastXY=null;
   cv.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];lastXY=showLoupe(t.clientX,t.clientY);},{passive:false});
   cv.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];lastXY=showLoupe(t.clientX,t.clientY);},{passive:false});
@@ -433,7 +470,23 @@
   // ── 짚은 색 처리: 영역 보여주고 확인받기 ──
   const confirmBar=document.getElementById('confirmBar');
   let pending=null;
+  let multi=[];        // 한 장 비교 모드의 다중 선택 목록
+  let judged=false;    // 직전 다중 판정 표시가 남아있는지
+  function isMulti(){return single&&mode==='test';}
   function pick(x,y){
+    if(isMulti()){
+      if(judged){multi=[];judged=false;restorePhoto();}
+      const sel=floodSelect(x,y);
+      if(!sel){guide.textContent='영역을 못 찾았어요. 색이 있는 부분을 짚어주세요';return;}
+      multi.push(sel);
+      drawMulti(multi);
+      guide.textContent=multi.length+'개 선택됨 · 계속 짚거나 모두 검사를 누르세요';
+      document.getElementById('confirmSw').style.background=`rgb(${sel.r},${sel.g},${sel.b})`;
+      document.getElementById('btnUse').textContent='✓ '+multi.length+'개 모두 검사';
+      document.getElementById('btnRetry').textContent='지우기';
+      confirmBar.style.display='flex';
+      return;
+    }
     let r,g,b;
     const sel=floodSelect(x,y);
     if(sel){
@@ -446,9 +499,16 @@
     }
     pending={r,g,b};
     document.getElementById('confirmSw').style.background=`rgb(${r},${g},${b})`;
+    document.getElementById('btnUse').textContent='✓ 이 영역으로 측정';
+    document.getElementById('btnRetry').textContent='다시 짚기';
     confirmBar.style.display='flex';
   }
   document.getElementById('btnUse').onclick=()=>{
+    if(isMulti()&&multi.length){
+      confirmBar.style.display='none';
+      judgeMulti();
+      return;
+    }
     if(!pending)return;
     confirmBar.style.display='none';
     restorePhoto();
@@ -456,11 +516,45 @@
     apply(p.r,p.g,p.b);
   };
   document.getElementById('btnRetry').onclick=()=>{
-    pending=null;
+    pending=null;multi=[];judged=false;
     confirmBar.style.display='none';
     restorePhoto();
     guide.textContent=mode==='ref'?'기준 색깔을 손가락으로 짚어주세요':'검사할 색깔을 손가락으로 짚어주세요';
   };
+
+  // ── 다중 판정: 짚은 영역 전부 한 번에 검사 ──
+  function judgeMulti(){
+    if(!ref){alert('먼저 기준 색을 짚어주세요.');return;}
+    let passCnt=0;
+    const verdicts=multi.map(sel=>{
+      const lab=rgb2lab(sel.r,sel.g,sel.b);
+      const de=dE00(...lab,...ref.lab);
+      const ok=de<=tol;
+      if(ok)passCnt++;
+      records.push({
+        label:'제품 '+(records.length+1),
+        time:new Date().toISOString(),
+        r:sel.r,g:sel.g,b:sel.b,hex:hex(sel.r,sel.g,sel.b),lab,
+        de,pass:ok,refHex:hex(ref.r,ref.g,ref.b),tol
+      });
+      return ok;
+    });
+    drawMulti(multi,verdicts);
+    judged=true;
+    const n=multi.length,allOk=passCnt===n;
+    const res=document.getElementById('result');
+    res.className='result '+(allOk?'pass':'fail');
+    res.style.display='block';
+    document.getElementById('resBig').textContent=allOk?'전체 합격 ✓':'합격 '+passCnt+' / '+n;
+    document.getElementById('resSmall').textContent=allOk
+      ?n+'개 모두 기준색과 같아요'
+      :'빨간 번호 영역이 불합격이에요 ('+(n-passCnt)+'개)';
+    document.getElementById('resRefSw').style.background=`rgb(${ref.r},${ref.g},${ref.b})`;
+    document.getElementById('resCurSw').style.background=`rgb(${ref.r},${ref.g},${ref.b})`;
+    guide.textContent='초록=합격, 빨강=불합격 · 새로 짚으면 다시 시작';
+    refreshList();
+    res.scrollIntoView({behavior:'smooth',block:'center'});
+  }
   function showLoupe(cx,cy){
     const [x,y]=canvasPos(cx,cy);
     const Z=8,R=110/Z/2;
