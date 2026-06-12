@@ -147,6 +147,7 @@
   <button id="tabSingle">한 장 비교 ★조명에 강함</button>
   <button id="tabAlign">글씨 위치</button>
   <button id="tabWeight">허용중량</button>
+  <button id="tabCoa">성적서 분석</button>
 </div>
 
 <!-- 한 장 비교 모드 -->
@@ -217,6 +218,32 @@
     <button class="bigbtn gray" id="wCsv" style="margin-top:8px">📄 제품 목록 내보내기 (엑셀용)</button>
   </div>
 </div>
+
+<!-- 성적서 분석 모드 -->
+<div id="coaWrap" style="display:none">
+  <div class="step">
+    <div class="num">📋</div>
+    <div><div class="txt">성적서(CoA) 사진 분석</div>
+    <div class="hint">제조일자·제조번호·INCI 성분을 AI가 읽어드려요</div></div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px" id="coaKeyBox">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">AI 분석 키 (최초 1회만 입력)</div>
+    <div style="display:flex;gap:8px">
+      <input type="password" id="coaKey" placeholder="sk-ant-..." style="flex:1;padding:11px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;font-family:var(--sans)">
+      <button class="bigbtn gray" id="coaKeySave" style="flex:none;padding:11px 14px;margin:0">저장</button>
+    </div>
+    <div style="font-size:11px;color:var(--dim);margin-top:6px">키는 이 핸드폰에만 저장돼요 · console.anthropic.com에서 발급</div>
+  </div>
+  <div class="btnrow">
+    <button class="bigbtn" id="coaShoot">📷 성적서 찍기</button>
+    <button class="bigbtn gray" id="coaAlb" style="flex:.45">🖼 앨범</button>
+  </div>
+  <img id="coaPrev" style="display:none;width:100%;border-radius:16px;margin-top:10px;border:1px solid var(--line)">
+  <button class="bigbtn" id="coaRun" style="display:none;margin-top:8px">🔍 분석하기</button>
+  <div id="coaResult" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px"></div>
+</div>
+<input type="file" id="coaFile" accept="image/*" capture="environment">
+<input type="file" id="coaFileAlb" accept="image/*">
 
 <!-- 따로 찍기 모드 -->
 <div id="sepWrap">
