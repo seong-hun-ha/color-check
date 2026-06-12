@@ -201,8 +201,8 @@
   <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px">
     <div class="wrow"><label>충전 용량 (mL)</label><input type="number" id="wVol" inputmode="decimal" placeholder="200"></div>
     <div class="wrow"><label>기준 비중</label><input type="number" id="wSg" inputmode="decimal" step="0.001" placeholder="1.033"></div>
-    <div class="wrow"><label>하한 (−%)</label><input type="number" id="wLow" inputmode="decimal" step="0.5" placeholder="3"></div>
-    <div class="wrow"><label>상한 (+%)</label><input type="number" id="wHigh" inputmode="decimal" step="0.5" placeholder="5"></div>
+    <div class="wrow"><label>하한 (−%) <span style="font-size:11px;color:var(--dim)">비우면 3</span></label><input type="number" id="wLow" inputmode="decimal" step="0.5" placeholder="3"></div>
+    <div class="wrow"><label>상한 (+%) <span style="font-size:11px;color:var(--dim)">비우면 5</span></label><input type="number" id="wHigh" inputmode="decimal" step="0.5" placeholder="5"></div>
   </div>
   <div id="wResult" style="display:none;margin-top:10px;background:var(--ink);color:#fff;border-radius:16px;padding:18px;text-align:center">
     <div style="font-size:12px;opacity:.7">기준중량</div>
@@ -285,7 +285,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v2.5</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v2.6</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -728,18 +728,22 @@
     const _setTab2=setTab;
     setTab=function(v){setWeightTab(false);_setTab2(v);};
   }
-  // 소수점 둘째 자리에서 올림 → 첫째 자리 표기 (부동소수점 오차 보정 포함)
-  const r1=x=>(Math.ceil(x*10-1e-7)/10).toFixed(1);
+  // 하한=올림, 상한=버림 (범위가 좁아지는 보수적 방향, 부동소수점 오차 보정)
+  const rUp=x=>(Math.ceil(x*10-1e-7)/10).toFixed(1);
+  const rDn=x=>(Math.floor(x*10+1e-7)/10).toFixed(1);
+  const r1=x=>(Math.round(x*10)/10).toFixed(1);
   function wCalc(){
     const vol=parseFloat(document.getElementById('wVol').value);
     const sg=parseFloat(document.getElementById('wSg').value);
-    const lo=parseFloat(document.getElementById('wLow').value);
-    const hi=parseFloat(document.getElementById('wHigh').value);
+    const loRaw=document.getElementById('wLow').value.trim();
+    const hiRaw=document.getElementById('wHigh').value.trim();
+    const lo=loRaw===''?3:parseFloat(loRaw);   // 비우면 기본 -3%
+    const hi=hiRaw===''?5:parseFloat(hiRaw);   // 비우면 기본 +5%
     const box=document.getElementById('wResult');
     if(!(vol>0&&sg>0&&lo>=0&&hi>=0)){box.style.display='none';return null;}
     const base=vol*sg, low=base*(1-lo/100), high=base*(1+hi/100);
-    document.getElementById('wBase').textContent=r1(base)+' g  ('+vol+'mL × '+sg+')';
-    document.getElementById('wRange').textContent=r1(low)+' ~ '+r1(high)+' g';
+    document.getElementById('wBase').textContent=r1(base)+' g  ('+vol+'mL × '+sg+' · −'+lo+'% / +'+hi+'%)';
+    document.getElementById('wRange').textContent=rUp(low)+' ~ '+rDn(high)+' g';
     box.style.display='block';
     return {vol,sg,lo,hi,base,low,high};
   }
@@ -782,7 +786,7 @@
   document.getElementById('wCsv').onclick=()=>{
     if(!wStore.length){alert('저장된 제품이 없어요.');return;}
     const head='제품명,충전용량(mL),기준비중,하한(%),상한(%),기준중량(g),허용하한(g),허용상한(g)\n';
-    const rows=wStore.map(p=>[p.name,p.vol,p.sg,p.lo,p.hi,r1(p.base),r1(p.low),r1(p.high)].join(',')).join('\n');
+    const rows=wStore.map(p=>[p.name,p.vol,p.sg,p.lo,p.hi,r1(p.base),rUp(p.low),rDn(p.high)].join(',')).join('\n');
     const blob=new Blob(['\uFEFF'+head+rows],{type:'text/csv;charset=utf-8'});
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
