@@ -312,7 +312,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v2.8</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v2.9</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -841,14 +841,24 @@
       txt=txt.replace(/```json|```/g,'').trim();
       const j=JSON.parse(txt);
       let html='';
-      const row=(k,v)=>v?'<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px"><span style="color:var(--dim)">'+k+'</span><b style="text-align:right">'+v+'</b></div>':'';
-      html+=row('문서종류',j.문서종류)+row('원료명',j.원료명)+row('제조사',j.제조사);
-      html+=row('제조일자',j.제조일자)+row('제조번호',j.제조번호)+row('유효기한',j.유효기한);
+      const val=v=>v?'<b style="color:var(--ink);font-size:15px">'+v+'</b>':'<span style="color:var(--dim)">없음</span>';
+      // 핵심 3가지를 크게 강조
+      html+='<div style="background:#eef3fe;border:1.5px solid var(--blue);border-radius:12px;padding:12px;margin-bottom:10px">';
+      html+='<div style="font-size:11px;color:var(--blue);font-weight:800">원료명</div>';
+      html+='<div style="font-size:19px;font-weight:900;margin:2px 0 10px">'+(j.원료명||'없음')+'</div>';
+      html+='<div style="display:flex;gap:8px">';
+      html+='<div style="flex:1;background:#fff;border-radius:9px;padding:8px;text-align:center"><div style="font-size:11px;color:var(--dim)">제조일자</div><div style="font-size:16px;font-weight:900">'+(j.제조일자||'없음')+'</div></div>';
+      html+='<div style="flex:1;background:#fff;border-radius:9px;padding:8px;text-align:center"><div style="font-size:11px;color:var(--dim)">제조번호</div><div style="font-size:16px;font-weight:900">'+(j.제조번호||'없음')+'</div></div>';
+      html+='</div></div>';
+      const row=(k,v)=>'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><span style="color:var(--dim);flex:none">'+k+'</span><span style="text-align:right">'+val(v)+'</span></div>';
+      html+=row('문서종류',j.문서종류)+row('제조사',j.제조사)+row('유효기한',j.유효기한);
+      html+='<div style="font-size:12px;color:var(--dim);margin:12px 0 4px;font-weight:800">INCI 성분</div>';
       if(j.INCI&&j.INCI.length){
-        html+='<div style="font-size:12px;color:var(--dim);margin:10px 0 4px;font-weight:700">INCI 성분</div>';
         for(const c of j.INCI){
-          html+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px dashed var(--line)"><span>'+c.name+'</span><span style="color:var(--dim)">'+(c.비율||'')+'</span></div>';
+          html+='<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--line)"><b style="font-size:14.5px;color:var(--ink)">'+c.name+'</b><span style="font-size:13px;font-weight:700;color:var(--ink)">'+(c.비율||'')+'</span></div>';
         }
+      }else{
+        html+='<div style="color:var(--dim);font-size:13px;padding:4px 0">없음</div>';
       }
       html+=row('시험결과',j.주요시험결과)+row('비고',j.비고);
       html+='<button class="bigbtn gray" id="coaCopy" style="margin-top:12px">📋 결과 복사</button>';
