@@ -315,7 +315,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v3.4</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v3.5</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -834,7 +834,7 @@
           max_tokens:1500,
           messages:[{role:'user',content:[
             {type:'image',source:{type:'base64',media_type:'image/jpeg',data:coaB64}},
-            {type:'text',text:'이 사진은 화장품 원료 성적서(CoA) 또는 시험성적서입니다. 다음 정보를 추출해서 JSON으로만 답하세요. 마크다운 코드블록 없이 순수 JSON만 출력하세요. 사진에 없는 항목은 빈 문자열로 두세요. INCI는 각 성분의 영문명과 함께 한국 화장품 표시 기준의 한글 표준명(발음 표기)을 kor에 넣으세요(예: Niacinamide=나이아신아마이드, Butylene Glycol=부틸렌글라이콜).\n{"문서종류":"","원료명":"","제조사":"","제조일자":"","제조번호":"","유효기한":"","INCI":[{"name":"INCI 영문명","kor":"한글발음","비율":""}],"주요시험결과":"한 줄 요약","비고":""}'}
+            {type:'text',text:'이 사진은 화장품 원료 성적서(CoA) 또는 시험성적서입니다. 다음 정보를 추출해서 JSON으로만 답하세요. 마크다운 코드블록 없이 순수 JSON만 출력하세요. 사진에 없는 항목은 빈 문자열로 두세요. INCI는 각 성분의 영문명과 함께 kor에 한글 발음 표기만 넣으세요. 절대 뜻을 번역하지 말고 소리나는 대로만 한글로 옮기세요. 예: Niacinamide=나이아신아마이드, Butylene Glycol=부틸렌글라이콜, Helianthus Annuus Seed Oil=헬리안투스아누스씨오일(Sunflower를 해바라기로 번역하면 안 됨), Tocopherol=토코페롤. 식물 학명도 의미 번역 없이 발음만 적으세요.\n{"문서종류":"","원료명":"","제조사":"","제조일자":"","제조번호":"","유효기한":"","INCI":[{"name":"INCI 영문명","kor":"한글발음","비율":""}],"주요시험결과":"한 줄 요약","비고":""}'}
           ]}]
         })
       });
