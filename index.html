@@ -864,8 +864,8 @@
       html+='<button class="bigbtn gray" id="coaCopy" style="margin-top:12px">📋 결과 복사</button>';
       out.innerHTML=html;
       document.getElementById('coaCopy').onclick=()=>{
-        const lines=['원료명: '+(j.원료명||''),'제조사: '+(j.제조사||''),'제조일자: '+(j.제조일자||''),'제조번호: '+(j.제조번호||''),'유효기한: '+(j.유효기한||''),
-          'INCI: '+((j.INCI||[]).map(c=>c.name+(c.비율?'('+c.비율+')':'')).join(', '))];
+        const lines=['원료명: '+(j.원료명||''),'제조사: '+(j.제조사||''),'제조일자: '+(mfgKor||j.제조일자||''),'제조번호: '+(j.제조번호||''),'유효기한: '+(j.유효기한||''),
+          'INCI: '+(inciList.map(c=>c.name+(c.kor?'('+c.kor+')':'')+(c.비율?' '+c.비율:'')).join(', ')||'없음')];
         navigator.clipboard.writeText(lines.join('\n')).then(()=>alert('복사됐어요!')).catch(()=>alert('복사 실패'));
       };
     }catch(err){
