@@ -315,7 +315,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v3.5</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v3.6</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -834,7 +834,7 @@
           max_tokens:1500,
           messages:[{role:'user',content:[
             {type:'image',source:{type:'base64',media_type:'image/jpeg',data:coaB64}},
-            {type:'text',text:'이 사진은 화장품 원료 성적서(CoA) 또는 시험성적서입니다. 다음 정보를 추출해서 JSON으로만 답하세요. 마크다운 코드블록 없이 순수 JSON만 출력하세요. 사진에 없는 항목은 빈 문자열로 두세요. INCI는 각 성분의 영문명과 함께 kor에 한글 발음 표기만 넣으세요. 절대 뜻을 번역하지 말고 소리나는 대로만 한글로 옮기세요. 영문명에 괄호가 있으면 괄호 안 단어도 빼지 말고 그대로 음역해서 포함하세요. 예: Niacinamide=나이아신아마이드, Butylene Glycol=부틸렌글라이콜, Helianthus Annuus (Sunflower) Seed Oil=헬리안투스아누스(선플라워)씨오일, Olea Europaea (Olive) Fruit Oil=올레아유로파에아(올리브)열매오일, Tocopherol=토코페롤. 괄호 안 Sunflower를 해바라기로 번역하거나 괄호를 생략하면 안 됩니다.\n{"문서종류":"","원료명":"","제조사":"","제조일자":"","제조번호":"","유효기한":"","INCI":[{"name":"INCI 영문명","kor":"한글발음","비율":""}],"주요시험결과":"한 줄 요약","비고":""}'}
+            {type:'text',text:'이 사진은 화장품 원료 성적서(CoA) 또는 시험성적서입니다. 다음 정보를 추출해서 JSON으로만 답하세요. 마크다운 코드블록 없이 순수 JSON만 출력하세요. 사진에 없는 항목은 빈 문자열로 두세요. INCI는 각 성분의 영문명과 함께 kor에 한글 발음 표기만 넣으세요. 모든 단어를 빠짐없이 소리나는 대로만 한글로 옮기고, 어떤 단어도 뜻으로 번역하지 마세요(Seed는 씨가 아니라 시드, Fruit는 열매가 아니라 프루잇, Sunflower는 해바라기가 아니라 선플라워, Oil은 오일, Extract는 익스트랙트). 괄호가 있으면 괄호와 그 안의 단어도 빼지 말고 그대로 음역하세요. 예: Niacinamide=나이아신아마이드, Butylene Glycol=부틸렌글라이콜, Helianthus Annuus (Sunflower) Seed Oil=헬리안투스아누스(선플라워)시드오일, Olea Europaea (Olive) Fruit Oil=올레아유로파에아(올리브)프루잇오일, Tocopherol=토코페롤.\n{"문서종류":"","원료명":"","제조사":"","제조일자":"","제조번호":"","유효기한":"","INCI":[{"name":"INCI 영문명","kor":"한글발음","비율":""}],"주요시험결과":"한 줄 요약","비고":""}'}
           ]}]
         })
       });
