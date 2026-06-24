@@ -151,6 +151,7 @@
   <button id="tabAlign">글씨 위치</button>
   <button id="tabWeight">허용중량</button>
   <button id="tabCoa">성적서 분석</button>
+  <button id="tabLoss">로스율</button>
 </div>
 
 <!-- 한 장 비교 모드 -->
@@ -246,6 +247,29 @@
   <button class="bigbtn" id="coaRun" style="display:none;margin-top:8px">🔍 분석하기</button>
   <div id="coaResult" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px"></div>
 </div>
+<!-- 부자재 로스율 모드 -->
+<div id="lossWrap" style="display:none">
+  <div class="step">
+    <div class="num">📦</div>
+    <div><div class="txt">부자재 로스율 계산</div>
+    <div class="hint">발주량 대비 초과 입고된 비율을 계산해요</div></div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px">
+    <div class="wrow"><label>발주량</label><input type="number" id="lOrder" inputmode="decimal" placeholder="10000"></div>
+    <div class="wrow"><label>입고량</label><input type="number" id="lIn" inputmode="decimal" placeholder="10300"></div>
+  </div>
+  <div id="lResult" style="display:none;margin-top:10px;background:var(--ink);color:#fff;border-radius:16px;padding:18px;text-align:center">
+    <div style="font-size:12px;opacity:.7">로스율</div>
+    <div id="lRate" style="font-size:34px;font-weight:900;letter-spacing:-0.02em;margin:2px 0"></div>
+    <div id="lDiff" style="font-size:13px;opacity:.85"></div>
+  </div>
+  <div style="margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px">
+    <div class="wrow"><label>부자재명</label><input type="text" id="lName" placeholder="용기 / 캡 / 라벨 등"></div>
+    <button class="bigbtn gray" id="lSave" style="margin-top:4px">💾 저장</button>
+    <div id="lList" style="margin-top:10px"></div>
+    <button class="bigbtn gray" id="lCsv" style="margin-top:8px">📄 목록 내보내기 (엑셀용)</button>
+  </div>
+</div>
 <input type="file" id="coaFile" accept="image/*" capture="environment">
 <input type="file" id="coaFileAlb" accept="image/*">
 
@@ -316,7 +340,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v3.7</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v3.8</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -759,6 +783,82 @@
     const _setTab2=setTab;
     setTab=function(v){setWeightTab(false);_setTab2(v);};
   }
+  // ── 부자재 로스율 ──
+  const tabLoss=document.getElementById('tabLoss');
+  const lossWrap=document.getElementById('lossWrap');
+  function setLossTab(on){
+    lossWrap.style.display=on?'block':'none';
+    document.getElementById('strict').style.display=on?'none':'flex';
+    tabLoss.classList.toggle('on',on);
+  }
+  tabLoss.onclick=()=>{
+    setTab(false);
+    document.getElementById('sepWrap').style.display='none';
+    document.getElementById('btnRef').style.display='none';
+    document.getElementById('step1').style.display='none';
+    tabSep.classList.remove('on');tabSingle.classList.remove('on');
+    setLossTab(true);
+    lRender();
+  };
+  {
+    const _st=setTab;
+    setTab=function(v){setLossTab(false);_st(v);};
+  }
+  const r1l=x=>(Math.round(x*10)/10).toFixed(1);
+  function lCalc(){
+    const order=parseFloat(document.getElementById('lOrder').value);
+    const inq=parseFloat(document.getElementById('lIn').value);
+    const box=document.getElementById('lResult');
+    if(!(order>0&&inq>=0)){box.style.display='none';return null;}
+    const diff=inq-order;
+    const rate=diff/order*100;
+    document.getElementById('lRate').textContent=r1l(rate)+' %';
+    document.getElementById('lDiff').textContent='입고 '+inq.toLocaleString()+' − 발주 '+order.toLocaleString()+' = '+(diff>=0?'+':'')+diff.toLocaleString()+'개';
+    box.style.display='block';
+    return {order,inq,diff,rate};
+  }
+  ['lOrder','lIn'].forEach(id=>document.getElementById(id).addEventListener('input',lCalc));
+  let lStore=[];
+  try{lStore=JSON.parse(localStorage.getItem('lossItems')||'[]');}catch(e){}
+  function lPersist(){try{localStorage.setItem('lossItems',JSON.stringify(lStore));}catch(e){}}
+  function lRender(){
+    const el=document.getElementById('lList');
+    if(!lStore.length){el.innerHTML='<div style="font-size:12px;color:var(--dim);text-align:center;padding:6px 0">저장된 항목이 없어요</div>';return;}
+    el.innerHTML='';
+    lStore.forEach((p,i)=>{
+      const d=document.createElement('div');
+      d.className='witem';
+      d.innerHTML='<div class="nm">'+p.name+'</div><div class="rg">'+r1l(p.rate)+'%</div><button data-i="'+i+'" class="ldel">✕</button>';
+      d.querySelector('.nm').onclick=()=>{
+        document.getElementById('lName').value=p.name;
+        document.getElementById('lOrder').value=p.order;
+        document.getElementById('lIn').value=p.inq;
+        lCalc();window.scrollTo({top:0,behavior:'smooth'});
+      };
+      d.querySelector('.ldel').onclick=()=>{lStore.splice(i,1);lPersist();lRender();};
+      el.appendChild(d);
+    });
+  }
+  document.getElementById('lSave').onclick=()=>{
+    const c=lCalc();
+    if(!c){alert('발주량·입고량을 입력해주세요.');return;}
+    const name=(document.getElementById('lName').value||'').trim()||('부자재 '+(lStore.length+1));
+    const ex=lStore.findIndex(p=>p.name===name);
+    const item={name,...c};
+    if(ex>=0)lStore[ex]=item;else lStore.push(item);
+    lPersist();lRender();
+  };
+  document.getElementById('lCsv').onclick=()=>{
+    if(!lStore.length){alert('저장된 항목이 없어요.');return;}
+    const head='부자재명,발주량,입고량,초과수량,로스율(%)\n';
+    const rows=lStore.map(p=>[p.name,p.order,p.inq,p.diff,r1l(p.rate)].join(',')).join('\n');
+    const blob=new Blob(['\uFEFF'+head+rows],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='부자재로스율_'+new Date().toISOString().slice(0,10)+'.csv';
+    a.click();URL.revokeObjectURL(a.href);
+  };
+
   // ── 성적서(CoA) AI 분석 ──
   const tabCoa=document.getElementById('tabCoa');
   const coaWrap=document.getElementById('coaWrap');
