@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>NINEONE 품질관리 보조</title>
 <link rel="apple-touch-icon" href="icon-180.png?v=30">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="compdb.js"></script>
+<script src="template_b64.js"></script>
 <link rel="icon" type="image/png" href="favicon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="품질관리">
@@ -152,6 +155,7 @@
   <button id="tabWeight">허용중량</button>
   <button id="tabCoa">성적서 분석</button>
   <button id="tabLoss">로스율</button>
+  <button id="tabIng">전성분표</button>
 </div>
 
 <!-- 한 장 비교 모드 -->
@@ -270,6 +274,28 @@
     <button class="bigbtn gray" id="lCsv" style="margin-top:8px">📄 목록 내보내기 (엑셀용)</button>
   </div>
 </div>
+<!-- 전성분표 작성 모드 -->
+<div id="ingWrap" style="display:none">
+  <div class="step">
+    <div class="num">🧪</div>
+    <div><div class="txt">처방전 → 전성분표 작성</div>
+    <div class="hint">처방전 엑셀을 넣으면 작성 시트가 채워진 엑셀로 나와요</div></div>
+  </div>
+  <button class="bigbtn" id="ingPick">📂 처방전 엑셀 선택</button>
+  <input type="file" id="ingFile" accept=".xlsx,.xls" style="display:none">
+  <div id="ingInfo" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px">
+    <div class="wrow"><label>제품명</label><input type="text" id="ingProd" style="width:170px"></div>
+    <div class="wrow"><label>작성일</label><input type="text" id="ingDate" style="width:170px" placeholder="2025-12-01"></div>
+    <div id="ingStat" style="font-size:13px;margin-top:8px"></div>
+  </div>
+  <div id="ingMiss" style="display:none;margin-top:10px;background:#fff4f4;border:1.5px solid var(--fail);border-radius:16px;padding:14px">
+    <div style="font-size:13px;font-weight:800;color:var(--fail);margin-bottom:8px">⚠ 미등록 원료 (COMP DB에 없음)</div>
+    <div id="ingMissList" style="font-size:12.5px;line-height:1.8"></div>
+    <div style="font-size:11.5px;color:var(--dim);margin-top:8px">미등록 원료는 조성%·기능·CAS가 비어서 출력됩니다. DB에 추가하면 자동 채워져요.</div>
+  </div>
+  <div id="ingPrev" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;max-height:320px;overflow:auto;font-size:11px"></div>
+  <button class="bigbtn" id="ingGen" style="display:none;margin-top:10px">📥 전성분표 엑셀 생성</button>
+</div>
 <input type="file" id="coaFile" accept="image/*" capture="environment">
 <input type="file" id="coaFileAlb" accept="image/*">
 
@@ -340,7 +366,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v3.8</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v3.9</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -783,6 +809,166 @@
     const _setTab2=setTab;
     setTab=function(v){setWeightTab(false);_setTab2(v);};
   }
+  // ── 전성분표 작성 ──
+  const tabIng=document.getElementById('tabIng');
+  const ingWrap=document.getElementById('ingWrap');
+  function setIngTab(on){
+    ingWrap.style.display=on?'block':'none';
+    document.getElementById('strict').style.display=on?'none':'flex';
+    tabIng.classList.toggle('on',on);
+  }
+  tabIng.onclick=()=>{
+    setTab(false);
+    document.getElementById('sepWrap').style.display='none';
+    document.getElementById('btnRef').style.display='none';
+    document.getElementById('step1').style.display='none';
+    tabSep.classList.remove('on');tabSingle.classList.remove('on');
+    setIngTab(true);
+  };
+  {const _st=setTab;setTab=function(v){setIngTab(false);_st(v);};}
+
+  let ingRows=null;
+  const COMP=window.INGRED_COMPDB||{comp:{},new:{},func_map:{}};
+  function pickVariant(code,name,nrows){
+    const c=COMP.comp[code];
+    if(c){
+      if(c.length===1)return c[0];
+      for(const v of c){if(v.name_ec&&name&&v.name_ec.trim().slice(0,10)===name.trim().slice(0,10))return v;}
+      const same=c.filter(v=>v.ing.length===nrows);
+      return same.length?same[0]:c[0];
+    }
+    // 신규 이름 매칭
+    for(const nm in COMP.new){if(name&&nm.slice(0,10)===name.trim().slice(0,10))return {ing:COMP.new[nm].ing,name_ec:nm};}
+    return null;
+  }
+  document.getElementById('ingPick').onclick=()=>document.getElementById('ingFile').click();
+  document.getElementById('ingFile').onchange=async e=>{
+    const f=e.target.files[0];e.target.value='';if(!f)return;
+    if(!window.ExcelJS){alert('엑셀 라이브러리 로드 실패. 인터넷 연결 후 다시 시도해주세요.');return;}
+    const buf=await f.arrayBuffer();
+    const wb=new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const ws=wb.worksheets[0];
+    const getC=(r,c)=>{const v=ws.getRow(r).getCell(c).value;
+      if(v&&typeof v==='object'){if('result'in v)return v.result;if('text'in v)return v.text;if('richText'in v)return v.richText.map(t=>t.text).join('');}
+      return v;};
+    // 종료행
+    let endrow=ws.rowCount+1;
+    for(let r=10;r<=ws.rowCount;r++){const a=String(getC(r,1)||'');if(a.includes('합계')||a.includes('특기')||a.trim()==='계'){endrow=r;break;}}
+    // 제품명 자동
+    let prod='';
+    for(let r=1;r<10;r++){const a=String(getC(r,1)||'');if(a.includes('제품명')){prod=String(getC(r,5)||'').split('\n')[0].trim();break;}}
+    document.getElementById('ingProd').value=prod;
+    document.getElementById('ingDate').value=new Date().toISOString().slice(0,10);
+    // 원료 블록 파싱
+    const rms=[];let cur=null;
+    for(let r=10;r<endrow;r++){
+      const code=String(getC(r,3)||'').trim();
+      const rmname=String(getC(r,4)||'').trim();
+      const icid=String(getC(r,5)||'').trim();
+      const kor=String(getC(r,6)||'').trim();
+      const g=getC(r,7);
+      if(!icid&&!kor)continue;
+      if(g!==null&&g!==''&&String(g).trim()!==''&&!isNaN(parseFloat(g))){
+        cur={code,name:rmname,total:parseFloat(g),rows:[]};rms.push(cur);
+      }
+      if(cur)cur.rows.push({icid,kor});
+    }
+    // 작성 행 생성
+    const rows=[];let no=0;const miss=[];
+    for(const rm of rms){
+      const v=pickVariant(rm.code,rm.name,rm.rows.length);
+      if(!v){
+        miss.push((rm.code||'')+' '+rm.name);
+        rm.rows.forEach((rr,i)=>{no++;rows.push({no,rmname:i===0?rm.name:'',icid:rr.icid,kor:rr.kor,
+          rmpct:i===0?rm.total:'',comppct:'',func:'',cas:'',remark:'미등록'});});
+        continue;
+      }
+      v.ing.forEach((ing,i)=>{no++;
+        const fn=ing.func||'';
+        rows.push({no,rmname:i===0?rm.name:'',icid:ing.icid||'',kor:ing.kor||'',
+          rmpct:i===0?rm.total:'',comppct:ing.pct,func:fn,cas:ing.cas||'',remark:''});});
+    }
+    ingRows=rows;
+    document.getElementById('ingInfo').style.display='block';
+    const totRM=rows.filter(r=>r.rmpct!=='').reduce((a,r)=>a+(+r.rmpct||0),0);
+    document.getElementById('ingStat').innerHTML='원료 '+rms.length+'개 · 성분 '+rows.length+'행 · 원료함량합계 <b>'+(Math.round(totRM*1000)/1000)+'</b>';
+    // 미등록 표시
+    const mb=document.getElementById('ingMiss');
+    if(miss.length){mb.style.display='block';
+      document.getElementById('ingMissList').innerHTML=miss.map(m=>'• '+m).join('<br>');
+    }else mb.style.display='none';
+    // 미리보기(상위 30행)
+    const pv=document.getElementById('ingPrev');pv.style.display='block';
+    let h='<table style="width:100%;border-collapse:collapse"><tr style="color:var(--dim)"><td>NO</td><td>ICID</td><td>한글</td><td>원료%</td><td>조성%</td></tr>';
+    rows.slice(0,40).forEach(r=>{h+='<tr><td>'+r.no+'</td><td>'+r.icid+'</td><td>'+r.kor+'</td><td>'+(r.rmpct||'')+'</td><td>'+(r.comppct||'')+'</td></tr>';});
+    h+='</table>'+(rows.length>40?'<div style="color:var(--dim);padding:6px">…외 '+(rows.length-40)+'행</div>':'');
+    pv.innerHTML=h;
+    document.getElementById('ingGen').style.display='block';
+  };
+
+  document.getElementById('ingGen').onclick=async()=>{
+    if(!ingRows||!ingRows.length){alert('처방전을 먼저 불러와주세요.');return;}
+    const btn=document.getElementById('ingGen');btn.textContent='생성 중…';
+    try{
+      const wb=new ExcelJS.Workbook();
+      const bin=atob(window.INGRED_TEMPLATE_B64);
+      const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+      await wb.xlsx.load(arr.buffer);
+      const ws=wb.getWorksheet('작성')||wb.worksheets[0];
+      // 헤더 정보
+      ws.getCell('A11').value='Product  Name : '+(document.getElementById('ingProd').value||'');
+      ws.getCell('A10').value='Date : '+(document.getElementById('ingDate').value||'');
+      const START=14;
+      const n=ingRows.length;
+      const lastData=START+n-1;
+      // 기존 양식의 스타일 참조행
+      const styleRow=ws.getRow(START);
+      // 데이터 채우기
+      ingRows.forEach((r,i)=>{
+        const rr=ws.getRow(START+i);
+        rr.getCell(1).value=r.no;
+        rr.getCell(2).value=r.rmname||null;
+        rr.getCell(3).value=r.icid||null;
+        rr.getCell(4).value=r.kor||null;
+        rr.getCell(5).value=(r.rmpct!==''&&r.rmpct!=null)?Number(r.rmpct):null;
+        rr.getCell(6).value=(r.comppct!==''&&r.comppct!=null)?Number(r.comppct):null;
+        // G: 각성분비율 수식 (블록 첫행 E 절대참조)
+        if(r.comppct!==''&&r.comppct!=null){
+          // 블록 첫행 찾기: 위로 올라가며 rmpct 있는 행
+          let bf=START+i;for(let k=i;k>=0;k--){if(ingRows[k].rmpct!==''&&ingRows[k].rmpct!=null){bf=START+k;break;}}
+          rr.getCell(7).value={formula:'$E$'+bf+'*F'+(START+i)+'/100'};
+        }else rr.getCell(7).value=null;
+        rr.getCell(8).value=r.func||null;
+        rr.getCell(9).value=r.cas||null;
+        rr.getCell(10).value=r.remark||null;
+      });
+      // 첫 정제수(Water) 행의 E를 잔량 수식으로
+      const firstWater=ingRows.findIndex(r=>r.rmpct!==''&&(r.icid||'').toLowerCase()==='water');
+      if(firstWater>=0){
+        ws.getRow(START+firstWater).getCell(5).value={formula:'100-SUM(E'+(START+firstWater+1)+':E'+lastData+')'};
+      }
+      // 합계행 처리: 양식 100행에 계가 있으면 그 위치 조정 (행수가 다르면 합계행을 새로)
+      // 양식은 99까지 데이터+100계. 우리 데이터가 그보다 적/많을 수 있으니 합계행을 lastData+1에 작성
+      const sumRow=ws.getRow(lastData+1);
+      sumRow.getCell(1).value='계';
+      sumRow.getCell(5).value={formula:'SUM(E'+START+':E'+lastData+')'};
+      sumRow.getCell(7).value={formula:'SUM(G'+START+':G'+lastData+')'};
+      // 저장
+      const out=await wb.xlsx.writeBuffer();
+      const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='전성분표_'+(document.getElementById('ingProd').value||'작성')+'.xlsx';
+      a.click();URL.revokeObjectURL(a.href);
+      btn.textContent='✓ 생성 완료! 다시 생성';
+      setTimeout(()=>btn.textContent='📥 전성분표 엑셀 생성',2500);
+    }catch(err){
+      alert('엑셀 생성 실패: '+(err.message||err));
+      btn.textContent='📥 전성분표 엑셀 생성';
+    }
+  };
+
   // ── 부자재 로스율 ──
   const tabLoss=document.getElementById('tabLoss');
   const lossWrap=document.getElementById('lossWrap');
