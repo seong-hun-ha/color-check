@@ -366,7 +366,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.1</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.3</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -942,10 +942,15 @@
       ws.getCell('A10').value='Date : '+(document.getElementById('ingDate').value||'');
       const START=14;
       const n=ingRows.length;
+      // 14행 이후 양식 기존 병합 해제 (헤더 1~13 보존)
+      const toUn=[];
+      (ws.model.merges||[]).slice().forEach(m=>{const mm=/[A-Z]+(\d+):[A-Z]+(\d+)/.exec(m);if(mm&&parseInt(mm[1])>=14)toUn.push(m);});
+      toUn.forEach(m=>{try{ws.unMergeCells(m);}catch(e){}});
+      // 양식 하단 인증문구(101~104) 읽어두고 비우기
+      const certTexts=[];
+      for(let r=101;r<=104;r++)certTexts.push(ws.getRow(r).getCell(1).value);
+      for(let r=100;r<=104;r++)for(let c=1;c<=10;c++)ws.getRow(r).getCell(c).value=null;
       const lastData=START+n-1;
-      // 기존 양식의 스타일 참조행
-      const styleRow=ws.getRow(START);
-      // 데이터 채우기
       ingRows.forEach((r,i)=>{
         const rr=ws.getRow(START+i);
         rr.getCell(1).value=r.no;
@@ -954,9 +959,7 @@
         rr.getCell(4).value=r.kor||null;
         rr.getCell(5).value=(r.rmpct!==''&&r.rmpct!=null)?Number(r.rmpct):null;
         rr.getCell(6).value=(r.comppct!==''&&r.comppct!=null)?Number(r.comppct):null;
-        // G: 각성분비율 수식 (블록 첫행 E 절대참조)
         if(r.comppct!==''&&r.comppct!=null){
-          // 블록 첫행 찾기: 위로 올라가며 rmpct 있는 행
           let bf=START+i;for(let k=i;k>=0;k--){if(ingRows[k].rmpct!==''&&ingRows[k].rmpct!=null){bf=START+k;break;}}
           rr.getCell(7).value={formula:'$E$'+bf+'*F'+(START+i)+'/100'};
         }else rr.getCell(7).value=null;
@@ -964,17 +967,29 @@
         rr.getCell(9).value=r.cas||null;
         rr.getCell(10).value=r.remark||null;
       });
-      // 첫 정제수(Water) 행의 E를 잔량 수식으로
-      const firstWater=ingRows.findIndex(r=>r.rmpct!==''&&(r.icid||'').toLowerCase()==='water');
-      if(firstWater>=0){
-        ws.getRow(START+firstWater).getCell(5).value={formula:'100-SUM(E'+(START+firstWater+1)+':E'+lastData+')'};
+      // B(원료명)·E(원료함량) 블록 세로 병합
+      let bs=0;
+      for(let i=1;i<=n;i++){
+        const isNew=(i===n)||(ingRows[i].rmpct!==''&&ingRows[i].rmpct!=null);
+        if(isNew){const top=START+bs,bot=START+i-1;
+          if(bot>top){try{ws.mergeCells(top,2,bot,2);}catch(e){}try{ws.mergeCells(top,5,bot,5);}catch(e){}}
+          bs=i;}
       }
-      // 합계행 처리: 양식 100행에 계가 있으면 그 위치 조정 (행수가 다르면 합계행을 새로)
-      // 양식은 99까지 데이터+100계. 우리 데이터가 그보다 적/많을 수 있으니 합계행을 lastData+1에 작성
-      const sumRow=ws.getRow(lastData+1);
+      for(let i=0;i<n;i++){const rc=ws.getRow(START+i);
+        rc.getCell(2).alignment={vertical:'middle',horizontal:'center',wrapText:true};
+        rc.getCell(5).alignment={vertical:'middle',horizontal:'center'};}
+      // 첫 정제수 E 잔량 수식
+      const firstWater=ingRows.findIndex(r=>r.rmpct!==''&&(r.icid||'').toLowerCase()==='water');
+      if(firstWater>=0)ws.getRow(START+firstWater).getCell(5).value={formula:'100-SUM(E'+(START+firstWater+1)+':E'+lastData+')'};
+      // 계행
+      const sumR=lastData+1;
+      const sumRow=ws.getRow(sumR);
       sumRow.getCell(1).value='계';
       sumRow.getCell(5).value={formula:'SUM(E'+START+':E'+lastData+')'};
       sumRow.getCell(7).value={formula:'SUM(G'+START+':G'+lastData+')'};
+      // 인증문구 재배치
+      let crow=sumR+1;
+      certTexts.forEach(t=>{if(t){ws.getRow(crow).getCell(1).value=t;try{ws.mergeCells(crow,1,crow,10);}catch(e){}crow++;}});
       // 저장
       const out=await wb.xlsx.writeBuffer();
       const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
