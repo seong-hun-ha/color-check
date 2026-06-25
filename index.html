@@ -366,7 +366,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.6</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.7</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1005,6 +1005,8 @@
       // 데이터가 원본보다 짧으면 남는 옛 행 정리
       for(let r=crow;r<=origLast+1;r++)for(let c=1;c<=9;c++)ws.getRow(r).getCell(c).value=null;
       // 저장
+      // 작성 시트만 남기고 나머지 제거 (채우기 완료 후 마지막에 한 번만 — OOM 방지)
+      wb.worksheets.slice().forEach(w=>{if(w.name!=='작성'){try{wb.removeWorksheet(w.id);}catch(e){}}});
       const out=await wb.xlsx.writeBuffer();
       const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
       const a=document.createElement('a');
