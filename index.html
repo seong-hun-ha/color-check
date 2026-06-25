@@ -366,7 +366,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.4</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.6</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -942,66 +942,68 @@
       ws.getCell('A10').value='Date : '+(document.getElementById('ingDate').value||'');
       const START=14;
       const n=ingRows.length;
-      // 14행 셀 서식 스냅샷 (열별로 모든 데이터행에 복제)
+      // 14행 서식 스냅샷 (9컬럼: A~I)
       const styleRef={};
-      for(let c=1;c<=10;c++){const cl=ws.getRow(START).getCell(c);
+      for(let c=1;c<=9;c++){const cl=ws.getRow(START).getCell(c);
         styleRef[c]={font:cl.font,border:cl.border,alignment:cl.alignment,numFmt:cl.numFmt};}
       const refH=ws.getRow(START).height;
-      // 14행 이후 양식 기존 병합 해제 (헤더 1~13 보존)
+      // 14행 이후 양식 기존 병합 해제
       const toUn=[];
       (ws.model.merges||[]).slice().forEach(m=>{const mm=/[A-Z]+(\d+):[A-Z]+(\d+)/.exec(m);if(mm&&parseInt(mm[1])>=14)toUn.push(m);});
       toUn.forEach(m=>{try{ws.unMergeCells(m);}catch(e){}});
-      // 양식 하단 인증문구(101~104) 읽어두고 비우기
+      // 하단 인증문구 백업
+      const origLast=ws.rowCount;
       const certTexts=[];
-      for(let r=101;r<=104;r++)certTexts.push(ws.getRow(r).getCell(1).value);
-      for(let r=100;r<=104;r++)for(let c=1;c<=10;c++)ws.getRow(r).getCell(c).value=null;
+      for(let r=START;r<=origLast;r++){const v=ws.getRow(r).getCell(1).value;
+        if(v&&typeof v==='string'&&v.indexOf('certify')>=0){for(let k=r;k<r+4;k++){certTexts.push(ws.getRow(k).getCell(1).value);}break;}}
+      // 14행부터 원본 데이터 비우기 (새 행 생성 금지 — OOM 방지)
+      for(let r=START;r<=origLast;r++)for(let c=1;c<=9;c++)ws.getRow(r).getCell(c).value=null;
       const lastData=START+n-1;
+      // 컬럼: A=NO B=ICID C=한글 D=원료함량 E=조성% F=Actual(수식) G=기능 H=CAS I=Remark
       ingRows.forEach((r,i)=>{
         const rr=ws.getRow(START+i);
         rr.getCell(1).value=r.no;
-        rr.getCell(2).value=r.rmname||null;
-        rr.getCell(3).value=r.icid||null;
-        rr.getCell(4).value=r.kor||null;
-        rr.getCell(5).value=(r.rmpct!==''&&r.rmpct!=null)?Number(r.rmpct):null;
-        rr.getCell(6).value=(r.comppct!==''&&r.comppct!=null)?Number(r.comppct):null;
+        rr.getCell(2).value=r.icid||null;
+        rr.getCell(3).value=r.kor||null;
+        rr.getCell(4).value=(r.rmpct!==''&&r.rmpct!=null)?Number(r.rmpct):null;
+        rr.getCell(5).value=(r.comppct!==''&&r.comppct!=null)?Number(r.comppct):null;
         if(r.comppct!==''&&r.comppct!=null){
           let bf=START+i;for(let k=i;k>=0;k--){if(ingRows[k].rmpct!==''&&ingRows[k].rmpct!=null){bf=START+k;break;}}
-          rr.getCell(7).value={formula:'$E$'+bf+'*F'+(START+i)+'/100'};
-        }else rr.getCell(7).value=null;
-        rr.getCell(8).value=r.func||null;
-        rr.getCell(9).value=r.cas||null;
-        rr.getCell(10).value=r.remark||null;
-        // 서식을 14행 기준으로 복제 (양식 빈 행에도 동일 서식 적용)
-        for(let c=1;c<=10;c++){const cl=rr.getCell(c);const st=styleRef[c];
+          rr.getCell(6).value={formula:'$D$'+bf+'*E'+(START+i)+'/100'};
+        }else rr.getCell(6).value=null;
+        rr.getCell(7).value=r.func||null;
+        rr.getCell(8).value=r.cas||null;
+        rr.getCell(9).value=r.remark||null;
+        for(let c=1;c<=9;c++){const cl=rr.getCell(c);const st=styleRef[c];
           if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;
           if(st.alignment)cl.alignment=st.alignment;if(st.numFmt)cl.numFmt=st.numFmt;}
         if(refH)rr.height=refH;
       });
-      // B(원료명)·E(원료함량) 블록 세로 병합
+      // D열(원료함량) 블록 세로 병합
       let bs=0;
       for(let i=1;i<=n;i++){
         const isNew=(i===n)||(ingRows[i].rmpct!==''&&ingRows[i].rmpct!=null);
         if(isNew){const top=START+bs,bot=START+i-1;
-          if(bot>top){try{ws.mergeCells(top,2,bot,2);}catch(e){}try{ws.mergeCells(top,5,bot,5);}catch(e){}}
+          if(bot>top){try{ws.mergeCells(top,4,bot,4);}catch(e){}}
           bs=i;}
       }
-      for(let i=0;i<n;i++){const rc=ws.getRow(START+i);
-        rc.getCell(2).alignment={vertical:'middle',horizontal:'center',wrapText:true};
-        rc.getCell(5).alignment={vertical:'middle',horizontal:'center'};}
-      // 첫 정제수 E 잔량 수식
+      for(let i=0;i<n;i++){ws.getRow(START+i).getCell(4).alignment={vertical:'middle',horizontal:'right'};}
+      // 첫 정제수 D 잔량 수식
       const firstWater=ingRows.findIndex(r=>r.rmpct!==''&&(r.icid||'').toLowerCase()==='water');
-      if(firstWater>=0)ws.getRow(START+firstWater).getCell(5).value={formula:'100-SUM(E'+(START+firstWater+1)+':E'+lastData+')'};
+      if(firstWater>=0)ws.getRow(START+firstWater).getCell(4).value={formula:'100-SUM(D'+(START+firstWater+1)+':D'+lastData+')'};
       // 계행
       const sumR=lastData+1;
       const sumRow=ws.getRow(sumR);
       sumRow.getCell(1).value='계';
-      sumRow.getCell(5).value={formula:'SUM(E'+START+':E'+lastData+')'};
-      sumRow.getCell(7).value={formula:'SUM(G'+START+':G'+lastData+')'};
-      for(let c=1;c<=10;c++){const st=styleRef[c];const cl=sumRow.getCell(c);
+      sumRow.getCell(4).value={formula:'SUM(D'+START+':D'+lastData+')'};
+      sumRow.getCell(6).value={formula:'SUM(F'+START+':F'+lastData+')'};
+      for(let c=1;c<=9;c++){const st=styleRef[c];const cl=sumRow.getCell(c);
         if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;}
       // 인증문구 재배치
       let crow=sumR+1;
-      certTexts.forEach(t=>{if(t){ws.getRow(crow).getCell(1).value=t;try{ws.mergeCells(crow,1,crow,10);}catch(e){}crow++;}});
+      certTexts.forEach(t=>{if(t){ws.getRow(crow).getCell(1).value=t;try{ws.mergeCells(crow,1,crow,9);}catch(e){}crow++;}});
+      // 데이터가 원본보다 짧으면 남는 옛 행 정리
+      for(let r=crow;r<=origLast+1;r++)for(let c=1;c<=9;c++)ws.getRow(r).getCell(c).value=null;
       // 저장
       const out=await wb.xlsx.writeBuffer();
       const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
