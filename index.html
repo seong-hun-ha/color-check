@@ -366,7 +366,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v3.9</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.1</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -849,9 +849,30 @@
     const wb=new ExcelJS.Workbook();
     await wb.xlsx.load(buf);
     const ws=wb.worksheets[0];
-    const getC=(r,c)=>{const v=ws.getRow(r).getCell(c).value;
-      if(v&&typeof v==='object'){if('result'in v)return v.result;if('text'in v)return v.text;if('richText'in v)return v.richText.map(t=>t.text).join('');}
-      return v;};
+    const getC=(r,c)=>{let v=ws.getRow(r).getCell(c).value;
+      if(v===null||v===undefined)return '';
+      if(typeof v==='object'){
+        if(v instanceof Date)return v;
+        if('result'in v)v=v.result;
+        else if('text'in v)v=v.text;
+        else if('richText'in v)v=v.richText.map(t=>t.text).join('');
+        else if('hyperlink'in v)v=v.text||'';
+        else v='';
+      }
+      return v===null||v===undefined?'':v;};
+    // 병합셀 첫 행만 마스터로 인정 (병합 하위셀은 값 복제되므로 무시)
+    const cellMaster=(r,c)=>{const cell=ws.getRow(r).getCell(c);
+      if(cell.isMerged){try{return cell.master.row===r;}catch(e){return true;}}
+      return true;};
+    // 함량(숫자) 전용: 병합 하위셀이면 NaN, 숫자 아니면 NaN
+    const getNum=(r,c)=>{
+      if(!cellMaster(r,c))return NaN;
+      const v=getC(r,c);
+      if(typeof v==='number')return v;
+      const t=String(v).replace(/[, %]/g,'').trim();
+      if(t==='')return NaN;
+      const n=parseFloat(t);
+      return (isFinite(n)&&/^[0-9.]+$/.test(t))?n:NaN;};
     // 종료행
     let endrow=ws.rowCount+1;
     for(let r=10;r<=ws.rowCount;r++){const a=String(getC(r,1)||'');if(a.includes('합계')||a.includes('특기')||a.trim()==='계'){endrow=r;break;}}
@@ -867,10 +888,10 @@
       const rmname=String(getC(r,4)||'').trim();
       const icid=String(getC(r,5)||'').trim();
       const kor=String(getC(r,6)||'').trim();
-      const g=getC(r,7);
+      const g=getNum(r,7);
       if(!icid&&!kor)continue;
-      if(g!==null&&g!==''&&String(g).trim()!==''&&!isNaN(parseFloat(g))){
-        cur={code,name:rmname,total:parseFloat(g),rows:[]};rms.push(cur);
+      if(!isNaN(g)){
+        cur={code,name:rmname,total:g,rows:[]};rms.push(cur);
       }
       if(cur)cur.rows.push({icid,kor});
     }
