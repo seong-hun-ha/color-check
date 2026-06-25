@@ -366,7 +366,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.3</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.4</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -942,6 +942,11 @@
       ws.getCell('A10').value='Date : '+(document.getElementById('ingDate').value||'');
       const START=14;
       const n=ingRows.length;
+      // 14행 셀 서식 스냅샷 (열별로 모든 데이터행에 복제)
+      const styleRef={};
+      for(let c=1;c<=10;c++){const cl=ws.getRow(START).getCell(c);
+        styleRef[c]={font:cl.font,border:cl.border,alignment:cl.alignment,numFmt:cl.numFmt};}
+      const refH=ws.getRow(START).height;
       // 14행 이후 양식 기존 병합 해제 (헤더 1~13 보존)
       const toUn=[];
       (ws.model.merges||[]).slice().forEach(m=>{const mm=/[A-Z]+(\d+):[A-Z]+(\d+)/.exec(m);if(mm&&parseInt(mm[1])>=14)toUn.push(m);});
@@ -966,6 +971,11 @@
         rr.getCell(8).value=r.func||null;
         rr.getCell(9).value=r.cas||null;
         rr.getCell(10).value=r.remark||null;
+        // 서식을 14행 기준으로 복제 (양식 빈 행에도 동일 서식 적용)
+        for(let c=1;c<=10;c++){const cl=rr.getCell(c);const st=styleRef[c];
+          if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;
+          if(st.alignment)cl.alignment=st.alignment;if(st.numFmt)cl.numFmt=st.numFmt;}
+        if(refH)rr.height=refH;
       });
       // B(원료명)·E(원료함량) 블록 세로 병합
       let bs=0;
@@ -987,6 +997,8 @@
       sumRow.getCell(1).value='계';
       sumRow.getCell(5).value={formula:'SUM(E'+START+':E'+lastData+')'};
       sumRow.getCell(7).value={formula:'SUM(G'+START+':G'+lastData+')'};
+      for(let c=1;c<=10;c++){const st=styleRef[c];const cl=sumRow.getCell(c);
+        if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;}
       // 인증문구 재배치
       let crow=sumR+1;
       certTexts.forEach(t=>{if(t){ws.getRow(crow).getCell(1).value=t;try{ws.mergeCells(crow,1,crow,10);}catch(e){}crow++;}});
