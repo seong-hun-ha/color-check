@@ -356,8 +356,8 @@
   </div>
 </div>
 
-<!-- 기록 -->
-<div class="records">
+<!-- 기록 (색상 검사 전용) -->
+<div class="records" id="recordsBox">
   <h2>검사 결과 <span id="stat"></span></h2>
   <div id="recList"><div class="empty-rec">아직 검사한 제품이 없어요</div></div>
   <div class="btnrow">
@@ -366,7 +366,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.7</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.8</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -768,6 +768,7 @@
   let single=false;
   const tabSep=document.getElementById('tabSep'),tabSingle=document.getElementById('tabSingle');
   function setTab(s){
+    document.getElementById('recordsBox').style.display='';
     single=s;
     tabSep.classList.toggle('on',!s);
     tabSingle.classList.toggle('on',s);
@@ -792,6 +793,7 @@
   const tabWeight=document.getElementById('tabWeight');
   const weightWrap=document.getElementById('weightWrap');
   function setWeightTab(on){
+    if(on)document.getElementById('recordsBox').style.display='none';else document.getElementById('recordsBox').style.display='';
     weightWrap.style.display=on?'block':'none';
     document.getElementById('strict').style.display=on?'none':'flex';
     tabWeight.classList.toggle('on',on);
@@ -813,6 +815,7 @@
   const tabIng=document.getElementById('tabIng');
   const ingWrap=document.getElementById('ingWrap');
   function setIngTab(on){
+    if(on)document.getElementById('recordsBox').style.display='none';else document.getElementById('recordsBox').style.display='';
     ingWrap.style.display=on?'block':'none';
     document.getElementById('strict').style.display=on?'none':'flex';
     tabIng.classList.toggle('on',on);
@@ -1025,6 +1028,7 @@
   const tabLoss=document.getElementById('tabLoss');
   const lossWrap=document.getElementById('lossWrap');
   function setLossTab(on){
+    if(on)document.getElementById('recordsBox').style.display='none';else document.getElementById('recordsBox').style.display='';
     lossWrap.style.display=on?'block':'none';
     document.getElementById('strict').style.display=on?'none':'flex';
     tabLoss.classList.toggle('on',on);
@@ -1101,6 +1105,7 @@
   const tabCoa=document.getElementById('tabCoa');
   const coaWrap=document.getElementById('coaWrap');
   function setCoaTab(on){
+    if(on)document.getElementById('recordsBox').style.display='none';else document.getElementById('recordsBox').style.display='';
     coaWrap.style.display=on?'block':'none';
     document.getElementById('strict').style.display=on?'none':'flex';
     tabCoa.classList.toggle('on',on);
@@ -1321,6 +1326,7 @@
   const S=620; // 분석용 작업 폭
 
   function setAlignTab(on){
+    if(on)document.getElementById('recordsBox').style.display='none';else document.getElementById('recordsBox').style.display='';
     alignWrap.style.display=on?'block':'none';
     document.getElementById('strict').style.display=on?'none':'flex';
     tabAlign.classList.toggle('on',on);
