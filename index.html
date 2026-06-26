@@ -294,6 +294,13 @@
     <div style="font-size:11.5px;color:var(--dim);margin-top:8px">조성%를 입력하면 작성 시트에 반영됩니다. 기능·CAS는 같은 성분이 있으면 자동으로 채워졌어요. (이번 생성에만 적용)</div>
   </div>
   <div id="ingPrev" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;max-height:320px;overflow:auto;font-size:11px"></div>
+  <div id="ingExportBox" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px">
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700"><input type="checkbox" id="ingExport" style="width:20px;height:20px"> 수출본도 만들기</label>
+    <div id="ingExportPick" style="display:none;margin-top:8px">
+      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">순서를 바꿀 1% 미만 성분을 2~3개 선택하세요 (나이아신아마이드·아데노신 제외)</div>
+      <div id="ingExportList" style="max-height:200px;overflow:auto;font-size:12.5px"></div>
+    </div>
+  </div>
   <button class="bigbtn" id="ingGen" style="display:none;margin-top:10px">📥 전성분표 엑셀 생성</button>
 </div>
 <input type="file" id="coaFile" accept="image/*" capture="environment">
@@ -366,7 +373,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.0</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.1</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -957,6 +964,7 @@
       });
     }else mb.style.display='none';
     renderIngPrev();
+    document.getElementById('ingExportBox').style.display='block';
     document.getElementById('ingGen').style.display='block';
   };
   function renderIngStat(){
@@ -1052,9 +1060,8 @@
       certTexts.forEach(t=>{if(t){ws.getRow(crow).getCell(1).value=t;try{ws.mergeCells(crow,1,crow,9);}catch(e){}crow++;}});
       // 데이터가 원본보다 짧으면 남는 옛 행 정리
       for(let r=crow;r<=origLast+1;r++)for(let c=1;c<=9;c++)ws.getRow(r).getCell(c).value=null;
-      // 저장
-      // 작성 시트만 남기고 나머지 제거 (채우기 완료 후 마지막에 한 번만 — OOM 방지)
-      wb.worksheets.slice().forEach(w=>{if(w.name!=='작성'){try{wb.removeWorksheet(w.id);}catch(e){}}});
+      // ===== 함량/외부/수출 시트 채우기 =====
+      buildOtherSheets(wb,ingRows,styleRef);
       const out=await wb.xlsx.writeBuffer();
       const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
       const a=document.createElement('a');
@@ -1068,6 +1075,101 @@
       btn.textContent='📥 전성분표 엑셀 생성';
     }
   };
+
+  // 작성 행 → 함량(한글명 합산+내림차순) 집계
+  function computeAgg(ingRows){
+    let curRM=0;
+    const withAct=ingRows.map(r=>{if(r.rmpct!==''&&r.rmpct!=null)curRM=Number(r.rmpct);
+      const act=(r.comppct!==''&&r.comppct!=null)?curRM*Number(r.comppct)/100:0;
+      return {...r,act};});
+    const map={};const order=[];
+    for(const r of withAct){const key=(r.kor||r.icid||'').trim();if(!key)continue;
+      if(!(key in map)){map[key]={icid:r.icid,kor:r.kor,func:r.func,cas:r.cas,sum:0};order.push(key);}
+      map[key].sum+=r.act;}
+    return order.map(k=>map[k]).sort((a,b)=>b.sum-a.sum);
+  }
+  // 수출 체크 시 1% 미만 성분 선택 UI
+  document.getElementById('ingExport').onchange=function(){
+    const pick=document.getElementById('ingExportPick');
+    pick.style.display=this.checked?'block':'none';
+    if(this.checked&&ingRows){
+      const agg=computeAgg(ingRows);
+      const sub1=agg.filter(a=>a.sum<1&&!['나이아신아마이드','아데노신'].includes((a.kor||'').trim()));
+      let h='';
+      sub1.forEach((a,i)=>{h+='<label style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)">'
+        +'<input type="checkbox" class="expSel" data-kor="'+(a.kor||'')+'" style="width:18px;height:18px">'
+        +'<span>'+(a.icid||'')+' <span style="color:var(--dim)">'+(a.kor||'')+'</span> <span style="color:var(--dim)">('+(Math.round(a.sum*10000)/10000)+'%)</span></span></label>';});
+      document.getElementById('ingExportList').innerHTML=h||'<div style="color:var(--dim)">1% 미만 성분이 없어요</div>';
+    }
+  };
+
+  // 함량/외부(함량)/외부/수출 시트 채우기
+  function buildOtherSheets(wb,ingRows,styleRef){
+    const agg=computeAgg(ingRows);
+    const n=agg.length;
+    // --- 함량 시트 (헤더 없음, 1행부터) ---
+    const wq=wb.getWorksheet('함량');
+    if(wq){
+      const ref={};for(let c=1;c<=6;c++){const cl=wq.getRow(1).getCell(c);ref[c]={font:cl.font,border:cl.border,alignment:cl.alignment,numFmt:cl.numFmt};}
+      const last=wq.rowCount;
+      for(let r=1;r<=last;r++)for(let c=1;c<=6;c++)wq.getRow(r).getCell(c).value=null;
+      agg.forEach((a,i)=>{const rr=wq.getRow(1+i);
+        rr.getCell(1).value=i+1;rr.getCell(2).value=a.icid||null;rr.getCell(3).value=a.kor||null;
+        rr.getCell(4).value=a.func||null;rr.getCell(5).value=a.cas||null;rr.getCell(6).value=Math.round(a.sum*1e8)/1e8;
+        for(let c=1;c<=6;c++){const cl=rr.getCell(c);const st=ref[c];if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;if(st.alignment)cl.alignment=st.alignment;if(st.numFmt)cl.numFmt=st.numFmt;}});
+    }
+    // --- 외부(함량): 13행헤더, 14행~, 컬럼 NO/ICID/한글/함량%/기능/CAS ---
+    fillExternal(wb.getWorksheet('외부(함량)'),agg,true);
+    // --- 외부: 함량% 없음. NO/ICID/한글/기능/CAS ---
+    fillExternal(wb.getWorksheet('외부'),agg,false);
+    // --- 수출 처리 ---
+    const doExport=document.getElementById('ingExport').checked;
+    if(doExport){
+      const sel=[...document.querySelectorAll('.expSel:checked')].map(e=>e.dataset.kor);
+      const aggX=swapOrder(agg,sel);
+      fillExternal(wb.getWorksheet('수출'),aggX,true);
+      fillExternal(wb.getWorksheet('수출 (2)'),aggX,false);
+    }else{
+      // 수출 안 만들면 해당 시트 제거
+      ['수출','수출 (2)'].forEach(nm=>{const w=wb.getWorksheet(nm);if(w){try{wb.removeWorksheet(w.id);}catch(e){}}});
+    }
+  }
+  // 외부형 시트 채우기 (withPct: 함량% 컬럼 포함 여부)
+  function fillExternal(ws,agg,withPct){
+    if(!ws)return;
+    const START=14;
+    const ref={};const cols=withPct?6:5; // withPct: NO/ICID/한글/함량%/기능/CAS, else NO/ICID/한글/기능/CAS
+    for(let c=1;c<=cols;c++){const cl=ws.getRow(START).getCell(c);ref[c]={font:cl.font,border:cl.border,alignment:cl.alignment,numFmt:cl.numFmt};}
+    const refH=ws.getRow(START).height;
+    // 14행 이후 병합 해제
+    const toUn=[];(ws.model.merges||[]).slice().forEach(m=>{const mm=/[A-Z]+(\d+):/.exec(m);if(mm&&parseInt(mm[1])>=14)toUn.push(m);});
+    toUn.forEach(m=>{try{ws.unMergeCells(m);}catch(e){}});
+    const origLast=ws.rowCount;
+    const certTexts=[];
+    for(let r=START;r<=origLast;r++){const v=ws.getRow(r).getCell(1).value;if(v&&typeof v==='string'&&v.indexOf('certify')>=0){for(let k=r;k<r+4;k++)certTexts.push(ws.getRow(k).getCell(1).value);break;}}
+    for(let r=START;r<=origLast;r++)for(let c=1;c<=cols+1;c++)ws.getRow(r).getCell(c).value=null;
+    agg.forEach((a,i)=>{const rr=ws.getRow(START+i);
+      rr.getCell(1).value=i+1;rr.getCell(2).value=a.icid||null;rr.getCell(3).value=a.kor||null;
+      if(withPct){rr.getCell(4).value=Math.round(a.sum*1e8)/1e8;rr.getCell(5).value=a.func||null;rr.getCell(6).value=a.cas||null;}
+      else{rr.getCell(4).value=a.func||null;rr.getCell(5).value=a.cas||null;}
+      for(let c=1;c<=cols;c++){const cl=rr.getCell(c);const st=ref[c];if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;if(st.alignment)cl.alignment=st.alignment;if(st.numFmt)cl.numFmt=st.numFmt;}
+      if(refH)rr.height=refH;});
+    let crow=START+agg.length;
+    certTexts.forEach(t=>{if(t){ws.getRow(crow).getCell(1).value=t;try{ws.mergeCells(crow,1,crow,cols);}catch(e){}crow++;}});
+    for(let r=crow;r<=origLast+1;r++)for(let c=1;c<=cols+1;c++)ws.getRow(r).getCell(c).value=null;
+  }
+  // 선택된 1% 미만 성분들 순서 섞기 (인접 쌍 swap)
+  function swapOrder(agg,selKors){
+    const a=agg.slice();
+    const idxs=selKors.map(k=>a.findIndex(x=>(x.kor||'')===k)).filter(i=>i>=0);
+    // 선택된 것들끼리 순환 이동 (확실히 순서가 바뀌도록)
+    if(idxs.length>=2){
+      const vals=idxs.map(i=>a[i]);
+      vals.push(vals.shift()); // 한 칸 회전
+      idxs.forEach((pos,j)=>{a[pos]=vals[j];});
+    }
+    return a;
+  }
 
   // ── 부자재 로스율 ──
   const tabLoss=document.getElementById('tabLoss');
