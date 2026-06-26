@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.1</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.2</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -920,7 +920,7 @@
         rm.rows.forEach((rr,i)=>{no++;
           const k=rr.icid?knownByIcid[rr.icid.toLowerCase()]:null;
           rows.push({no,rmname:i===0?rm.name:'',icid:rr.icid,kor:rr.kor,
-            rmpct:i===0?rm.total:'',comppct:'',func:k?k.func:'',cas:k?k.cas:'',remark:'미등록',
+            rmpct:i===0?rm.total:'',comppct:'',func:k?k.func:'',cas:k?k.cas:'',remark:'DB 미등록',
             missing:true,blockFirst:i===0});});
         continue;
       }
