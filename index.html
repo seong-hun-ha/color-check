@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.6</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.7</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1143,7 +1143,7 @@
       // ★ 테두리: 13~계행 A~L(12열)에 부여
       applyGridBorder(ws,sumR,12);
       // 도장 삽입
-      addStamp(wb,ws,sumR);
+      addStamp(wb,ws,sumR,9);
       // ===== 함량/외부/수출 시트 채우기 =====
       buildOtherSheets(wb,ingRows,styleRef,certTexts);
       const out=await wb.xlsx.writeBuffer();
@@ -1278,7 +1278,7 @@
       // 테두리: 1행(헤더)~계행, 7열
       applyGridBorderFrom(wq,1,nmpaSum,7);
       // 도장 (Won-Joo Kim 줄 = 계행+3)
-      addStamp(wq.workbook,wq,nmpaSum);
+      addStamp(wq.workbook,wq,nmpaSum,5);
     }
     // --- 외부(함량): 13행헤더, 14행~, 컬럼 NO/ICID/한글/함량%/기능/CAS ---
     fillExternal(wb.getWorksheet('외부(함량)'),agg,true);
@@ -1337,11 +1337,12 @@
       crow++;}});
     // ★ 테두리: cols(Remark 포함) 범위로 부여
     applyGridBorder(ws,sumR,cols);
-    // 도장 삽입
-    addStamp(ws.workbook,ws,sumR);
+    // 도장 삽입 (시트별 좌우 위치: 외부(함량)·수출=5, 외부·수출(2)=기본4.5)
+    const stampCol=(ws.name==='외부(함량)'||ws.name==='수출')?5:4.5;
+    addStamp(ws.workbook,ws,sumR,stampCol);
   }
   // 도장 이미지 삽입 (서명 영역)
-  function addStamp(wb,ws,sumRow){
+  function addStamp(wb,ws,sumRow,stampCol){
     if(!window.INGRED_STAMP_B64)return;
     try{
       // 양식 원본에 있던 하단(서명영역) 도장 제거 — 로고(상단)는 유지
@@ -1349,8 +1350,8 @@
       const imgId=wb.addImage({base64:window.INGRED_STAMP_B64,extension:'png'});
       // 인증문구: 계행+1=certify, +2=Signed by, +3=Won-Joo Kim
       const r=sumRow+3; // Won-Joo Kim 줄
-      // 이름 글자 위에 오도록 col 위치(서명은 가운데 정렬, 대략 중앙)
-      ws.addImage(imgId,{tl:{col:4.5,row:r-0.4},ext:{width:70,height:70}});
+      const col=(stampCol!=null)?stampCol:4.5;
+      ws.addImage(imgId,{tl:{col:col,row:r-0.4},ext:{width:70,height:70}});
     }catch(e){}
   }
   // 선택된 1% 미만 성분들 순서 섞기 (인접 쌍 swap)
