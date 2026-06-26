@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.7</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.8</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1197,10 +1197,13 @@
   function addStamp(wb,ws,sumRow){
     if(!window.INGRED_STAMP_B64)return;
     try{
+      // 양식 원본에 있던 하단(서명영역) 도장 제거 — 로고(상단)는 유지
+      if(ws._media)ws._media=ws._media.filter(m=>!(m.range&&m.range.tl&&m.range.tl.nativeRow>50));
       const imgId=wb.addImage({base64:window.INGRED_STAMP_B64,extension:'png'});
-      // 인증문구 줄(계행+2 ≈ 서명자 이름 줄) 오른쪽에 도장
-      const r=sumRow+2; // Won-Joo Kim 줄 근처
-      ws.addImage(imgId,{tl:{col:6.2,row:r-0.3},ext:{width:75,height:75}});
+      // 인증문구: 계행+1=certify, +2=Signed by, +3=Won-Joo Kim
+      const r=sumRow+3; // Won-Joo Kim 줄
+      // 이름 글자 위에 오도록 col 위치(서명은 가운데 정렬, 대략 중앙)
+      ws.addImage(imgId,{tl:{col:4.5,row:r-0.4},ext:{width:70,height:70}});
     }catch(e){}
   }
   // 선택된 1% 미만 성분들 순서 섞기 (인접 쌍 swap)
