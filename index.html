@@ -394,7 +394,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v8.4</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v8.5</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1424,7 +1424,10 @@
     for(const r of withAct){const key=(r.kor||r.icid||'').trim();if(!key)continue;
       if(!(key in map)){map[key]={icid:r.icid,kor:r.kor,func:r.func,cas:r.cas,sum:0};order.push(key);}
       map[key].sum+=r.act;}
-    return order.map(k=>map[k]).sort((a,b)=>b.sum-a.sum);
+    return order.map(k=>map[k]).sort((a,b)=>{
+      if(Math.abs(b.sum-a.sum)>1e-9)return b.sum-a.sum;       // 함량 내림차순
+      return (a.kor||'').localeCompare(b.kor||'','ko');        // 동률: 국문명 가나다 오름차순
+    });
   }
   // 수출 체크 시 1% 미만 성분 선택 UI
   document.getElementById('ingExport').onchange=function(){
