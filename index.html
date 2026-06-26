@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.3</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.4</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1233,15 +1233,23 @@
         'Remark'
       ];
       const baseFont=wq.getRow(1).getCell(1).font||{name:'맑은 고딕',size:10,bold:true};
-      NMPA_HDR.forEach((t,idx)=>{const cell=wq.getRow(1).getCell(idx+1);cell.style=JSON.parse(JSON.stringify(hb));
+      const GRAYBG={type:'pattern',pattern:'solid',fgColor:{theme:0,tint:-0.05}};
+      const HDRFONT={name:'맑은 고딕',size:10,bold:true};
+      NMPA_HDR.forEach((t,idx)=>{const c=idx+1;const cell=wq.getRow(1).getCell(c);cell.style=JSON.parse(JSON.stringify(hb));
+        // 헤더 폰트 맑은고딕 10 bold, B~G 배경 회색
+        cell.font=JSON.parse(JSON.stringify(HDRFONT));
+        if(c>=2)cell.fill=JSON.parse(JSON.stringify(GRAYBG));
+        cell.alignment={vertical:'middle',horizontal:'center',wrapText:true};
         if(typeof t==='string'){cell.value=t;}
-        else{cell.value={richText:t.map(p=>({text:p[0],font:Object.assign({},baseFont,p[1]||{})}))};}});
+        else{cell.value={richText:t.map(p=>({text:p[0],font:Object.assign({},HDRFONT,p[1]||{})}))};}});
+      // 1행 높이 키우기
+      wq.getRow(1).height=49.5;
       // 열너비
       const NW=[3.6,39.5,35.4,13.1,22.4,11.1,7.4];NW.forEach((w,i)=>{wq.getColumn(i+1).width=w;});
       // 14행(데이터 서식 기준) 스냅샷 — 기존 함량시트 2행 서식 사용
       const dref={};for(let c=1;c<=7;c++)dref[c]=JSON.parse(JSON.stringify(wq.getRow(2).getCell(c).style||{}));
       const last=wq.rowCount;
-      // 2행~ 데이터 채우기 (NO 연속, Actual=함량합산)
+      // 2행~ 데이터 채우기 (NO 연속, Actual=함량합산). D열(4)·Remark열(7) 배경 회색
       agg.forEach((a,i)=>{const rr=wq.getRow(2+i);
         rr.getCell(1).value=i+1;
         rr.getCell(2).value=a.icid||null;
@@ -1250,7 +1258,9 @@
         rr.getCell(5).value=a.func||null;
         rr.getCell(6).value=a.cas||null;
         rr.getCell(7).value=null; // Remark
-        for(let c=1;c<=7;c++)rr.getCell(c).style=JSON.parse(JSON.stringify(dref[c]));});
+        for(let c=1;c<=7;c++)rr.getCell(c).style=JSON.parse(JSON.stringify(dref[c]));
+        // 배경은 D(Actual)·G(Remark)만, 나머지는 제거
+        for(let c=1;c<=7;c++){if(c===4||c===7)rr.getCell(c).fill=JSON.parse(JSON.stringify(GRAYBG));else rr.getCell(c).fill={type:'pattern',pattern:'none'};}});
       const nmpaSum=2+agg.length;
       // 계행
       const sr=wq.getRow(nmpaSum);sr.getCell(1).value='계';sr.getCell(4).value={formula:'SUM(D2:D'+(nmpaSum-1)+')'};
