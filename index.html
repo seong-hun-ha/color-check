@@ -374,7 +374,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.4</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.5</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1062,8 +1062,10 @@
         try{ws.mergeCells(crow,1,crow,9);}catch(e){}
         for(let c=1;c<=9;c++)ws.getRow(crow).getCell(c).border=noBorder;
         crow++;}});
-      // 데이터가 원본보다 짧으면 남는 옛 행 값+테두리 완전 제거
-      for(let r=crow;r<=origLast+2;r++)for(let c=1;c<=9;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.border=noBorder;}
+      // 데이터 끝~양식 끝까지 남는 옛 행 완전 정리 (값+테두리+배경)
+      const emptyB={top:{style:null},bottom:{style:null},left:{style:null},right:{style:null}};
+      const emptyF={type:'pattern',pattern:'none'};
+      for(let r=crow;r<=origLast+3;r++)for(let c=1;c<=9;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.border=JSON.parse(JSON.stringify(emptyB));cl.fill=JSON.parse(JSON.stringify(emptyF));}
       // ===== 함량/외부/수출 시트 채우기 =====
       buildOtherSheets(wb,ingRows,styleRef);
       const out=await wb.xlsx.writeBuffer();
@@ -1172,8 +1174,10 @@
       try{ws.mergeCells(crow,1,crow,cols);}catch(e){}
       for(let c=1;c<=cols;c++)ws.getRow(crow).getCell(c).border=noBorder;
       crow++;}});
-    // 남는 옛 행 값+테두리 제거
-    for(let r=crow;r<=origLast+2;r++)for(let c=1;c<=cols+1;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.border=noBorder;}
+    // 남는 옛 행 값+테두리+배경 완전 제거
+    const emptyB2={top:{style:null},bottom:{style:null},left:{style:null},right:{style:null}};
+    const emptyF2={type:'pattern',pattern:'none'};
+    for(let r=crow;r<=origLast+3;r++)for(let c=1;c<=cols+2;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.border=JSON.parse(JSON.stringify(emptyB2));cl.fill=JSON.parse(JSON.stringify(emptyF2));}
   }
   // 선택된 1% 미만 성분들 순서 섞기 (인접 쌍 swap)
   function swapOrder(agg,selKors){
