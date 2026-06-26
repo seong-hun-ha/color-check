@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.8</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.9</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -843,14 +843,23 @@
   const COMP=window.INGRED_COMPDB||{comp:{},new:{},func_map:{}};
   function pickVariant(code,name,nrows){
     const c=COMP.comp[code];
+    const norm=s=>(s||'').trim().replace(/\s+/g,' ').toLowerCase();
     if(c){
-      if(c.length===1)return c[0];
-      for(const v of c){if(v.name_ec&&name&&v.name_ec.trim().slice(0,10)===name.trim().slice(0,10))return v;}
-      const same=c.filter(v=>v.ing.length===nrows);
-      return same.length?same[0]:c[0];
+      if(c.length===1){
+        // 변형 1개라도 성분 개수까지 맞아야 인정
+        return c[0].ing.length===nrows?c[0]:null;
+      }
+      const nm=norm(name);
+      // 원료명 정확 일치 + 성분 개수 일치 (둘 다 만족)
+      const hit=c.find(v=>v.name_ec&&norm(v.name_ec)===nm&&v.ing.length===nrows);
+      if(hit)return hit;
+      // 조건 미충족 → 미등록 처리
+      return null;
     }
-    // 신규 이름 매칭
-    for(const nm in COMP.new){if(name&&nm.slice(0,10)===name.trim().slice(0,10))return {ing:COMP.new[nm].ing,name_ec:nm};}
+    // 신규 시트: 원료명 정확 일치 + 성분 개수 일치
+    for(const nm in COMP.new){
+      if(name&&norm(nm)===norm(name)&&COMP.new[nm].ing.length===nrows)return {ing:COMP.new[nm].ing,name_ec:nm};
+    }
     return null;
   }
   document.getElementById('ingPick').onclick=()=>document.getElementById('ingFile').click();
