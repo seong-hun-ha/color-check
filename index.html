@@ -366,7 +366,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.9</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.0</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -929,10 +929,16 @@
     if(missRows.length){
       mb.style.display='block';
       let mh='';
-      // 미등록 행마다 조성%·기능·CAS 입력칸
+      // 미등록 행을 원료(블록)별로 그룹핑
+      let curName=null;
       rows.forEach((r,idx)=>{
         if(!r.missing)return;
-        mh+='<div style="border-bottom:1px solid #f3d0d0;padding:7px 0">'
+        // 블록 첫 행이면 원료명 헤더 출력 (blockFirst 또는 rmpct 있는 행)
+        if(r.blockFirst||(r.rmpct!==''&&r.rmpct!=null)){
+          curName=r.rmname||'(원료명 없음)';
+          mh+='<div style="margin-top:10px;padding:6px 8px;background:#ffe3e3;border-radius:8px;font-weight:800;font-size:12.5px">📦 '+curName+(r.rmpct?' <span style="font-weight:600;color:var(--dim)">('+r.rmpct+'%)</span>':'')+'</div>';
+        }
+        mh+='<div style="padding:7px 4px 7px 12px;border-bottom:1px solid #f3d0d0">'
           +'<div style="font-weight:700;font-size:12.5px">'+(r.icid||'(성분명 없음)')+' <span style="color:var(--dim);font-weight:400">'+(r.kor||'')+'</span></div>'
           +'<div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">'
           +'<input data-idx="'+idx+'" data-fld="comppct" type="number" inputmode="decimal" placeholder="조성%" value="'+(r.comppct||'')+'" style="width:72px;padding:7px;border:1px solid var(--line);border-radius:8px;font-size:12px">'
