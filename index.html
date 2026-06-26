@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.4</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.5</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1145,7 +1145,7 @@
       // 도장 삽입
       addStamp(wb,ws,sumR);
       // ===== 함량/외부/수출 시트 채우기 =====
-      buildOtherSheets(wb,ingRows,styleRef);
+      buildOtherSheets(wb,ingRows,styleRef,certTexts);
       const out=await wb.xlsx.writeBuffer();
       const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
       const a=document.createElement('a');
@@ -1211,7 +1211,7 @@
   };
 
   // 함량/외부(함량)/외부/수출 시트 채우기
-  function buildOtherSheets(wb,ingRows,styleRef){
+  function buildOtherSheets(wb,ingRows,styleRef,certTexts){
     const agg=computeAgg(ingRows);
     const n=agg.length;
     // --- 함량 시트 (헤더 없음, 1행부터) ---
@@ -1267,10 +1267,16 @@
       for(let c=1;c<=7;c++)sr.getCell(c).style=JSON.parse(JSON.stringify(dref[c]));
       // 계행 아래 style 비우기
       for(let r=nmpaSum+1;r<=last;r++)for(let c=1;c<=16;c++){const cl=wq.getRow(r).getCell(c);cl.value=null;cl.style={};}
+      // 인증문구 4줄 (작성 시트에서 가져온 certTexts, 굵게)
+      let ncrow=nmpaSum+1;
+      if(certTexts)certTexts.forEach(t=>{if(t){const cc=wq.getRow(ncrow).getCell(1);cc.value=t;
+        cc.font={name:'맑은 고딕',size:10,bold:true};
+        try{wq.mergeCells(ncrow,1,ncrow,7);}catch(e){}
+        ncrow++;}});
       // 테두리: 1행(헤더)~계행, 7열
       applyGridBorderFrom(wq,1,nmpaSum,7);
-      // 도장
-      addStamp(wq.workbook,wq,nmpaSum-1);
+      // 도장 (Won-Joo Kim 줄 = 계행+3)
+      addStamp(wq.workbook,wq,nmpaSum);
     }
     // --- 외부(함량): 13행헤더, 14행~, 컬럼 NO/ICID/한글/함량%/기능/CAS ---
     fillExternal(wb.getWorksheet('외부(함량)'),agg,true);
