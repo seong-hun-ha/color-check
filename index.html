@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.9</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.0</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1006,6 +1006,21 @@
       const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
       await wb.xlsx.load(arr.buffer);
       const ws=wb.getWorksheet('작성')||wb.worksheets[0];
+      // === 상단 표지(1~12행) 병합 9열→12열로 재조정 (작성 시트 12컬럼화 대응) ===
+      // 기존 A:I 병합 해제 후 A:L로 재병합 (가운데 정렬 유지)
+      const topMerges=[];
+      (ws.model.merges||[]).slice().forEach(m=>{const mm=/[A-Z]+(\d+):[A-Z]+(\d+)/.exec(m);if(mm&&parseInt(mm[2])<=12)topMerges.push(m);});
+      topMerges.forEach(m=>{try{ws.unMergeCells(m);}catch(e){}});
+      // 로고영역(1~6행)과 텍스트행(7~12행) A:L 재병합
+      try{ws.mergeCells(1,1,6,12);}catch(e){}
+      for(let r=7;r<=12;r++){try{ws.mergeCells(r,1,r,12);}catch(e){}}
+      // 로고 이미지 가운데로 (9열→12열, 오른쪽으로 2열 이동)
+      try{
+        const logoImg=ws.getImages().find(im=>im.range.tl.nativeRow<6);
+        if(logoImg){const shift=2;
+          logoImg.range.tl.nativeCol+=shift;logoImg.range.tl.col+=shift;
+          logoImg.range.br.nativeCol+=shift;logoImg.range.br.col+=shift;}
+      }catch(e){}
       // 헤더 정보
       ws.getCell('A11').value='Product  Name : '+(document.getElementById('ingProd').value||'');
       ws.getCell('A10').value='Date : '+(document.getElementById('ingDate').value||'');
