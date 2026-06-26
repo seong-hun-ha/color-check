@@ -394,7 +394,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v8.3</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v8.4</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -881,23 +881,28 @@
     const S=v=>(''+v).trim();
     const N=v=>{if(v===''||v==null)return null;const n=parseFloat((''+v).replace(/[, %]/g,''));return isNaN(n)?null:n;};
     const ws=wb.getWorksheet('comp');if(!ws)throw new Error('comp 시트가 없습니다');
+    const isMaster=(cell)=>{if(cell.isMerged){try{return cell.master.address===cell.address;}catch(e){return true;}}return true;};
     const comp={};let curCode=null,curV=null;
     ws.eachRow((row,r)=>{if(r===1)return;
-      const nameEc=S(cv(row.getCell(4)))||S(cv(row.getCell(1)));
-      const maker=S(cv(row.getCell(2))),code=S(cv(row.getCell(3)));
+      const codeCell=row.getCell(3),nameCell=row.getCell(4);
+      const nameEc=S(cv(nameCell))||S(cv(row.getCell(1)));
+      const maker=S(cv(row.getCell(2))),code=S(cv(codeCell));
       const icid=S(cv(row.getCell(5))),kor=S(cv(row.getCell(6)));
       const pct=N(cv(row.getCell(7))),func=S(cv(row.getCell(8))),cas=S(cv(row.getCell(9),S(cv(row.getCell(5)))));
       if(!icid&&!kor)return;
-      if(code||nameEc){curCode=code||curCode;curV={name_ec:nameEc,maker,ing:[]};(comp[curCode]=comp[curCode]||[]).push(curV);}
+      // 새 변형 시작: 코드 또는 원료명 셀이 병합 마스터(첫 행)일 때만
+      const newVariant=(code&&isMaster(codeCell))||(nameEc&&isMaster(nameCell));
+      if(newVariant){curCode=code||curCode;curV={name_ec:nameEc,maker,ing:[]};(comp[curCode]=comp[curCode]||[]).push(curV);}
       if(curV)curV.ing.push({icid,kor,pct,func,cas});
     });
     const wn=wb.getWorksheet('신규');const nw={};
     if(wn){let cur=null;wn.eachRow((row,r)=>{
-      const nameEc=S(cv(row.getCell(4)));
+      const nameCell=row.getCell(4);
+      const nameEc=S(cv(nameCell));
       const icid=S(cv(row.getCell(5))),kor=S(cv(row.getCell(6)));
       const pct=N(cv(row.getCell(7))),func=S(cv(row.getCell(8))),cas=S(cv(row.getCell(9),S(cv(row.getCell(5)))));
       if(!icid&&!kor)return;
-      if(nameEc){cur={ing:[]};nw[nameEc]=cur;}
+      if(nameEc&&isMaster(nameCell)){cur={ing:[]};nw[nameEc]=cur;}
       if(cur)cur.ing.push({icid,kor,pct,func,cas});
     });}
     const fmap={};
