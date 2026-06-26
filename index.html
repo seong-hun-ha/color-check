@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.5</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.6</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1265,6 +1265,8 @@
       // 계행
       const sr=wq.getRow(nmpaSum);sr.getCell(1).value='계';sr.getCell(4).value={formula:'SUM(D2:D'+(nmpaSum-1)+')'};
       for(let c=1;c<=7;c++)sr.getCell(c).style=JSON.parse(JSON.stringify(dref[c]));
+      // 계행 배경도 D·G만 (나머지 제거)
+      for(let c=1;c<=7;c++){if(c===4||c===7)sr.getCell(c).fill=JSON.parse(JSON.stringify(GRAYBG));else sr.getCell(c).fill={type:'pattern',pattern:'none'};}
       // 계행 아래 style 비우기
       for(let r=nmpaSum+1;r<=last;r++)for(let c=1;c<=16;c++){const cl=wq.getRow(r).getCell(c);cl.value=null;cl.style={};}
       // 인증문구 4줄 (작성 시트에서 가져온 certTexts, 굵게)
