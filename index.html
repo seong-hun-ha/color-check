@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.2</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.3</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1041,8 +1041,8 @@
       const HEADERS=[
         'NO',
         [['Product\nCompany\n'],['(원료사)',RED]],
-        [['RM Code\n'],['(원료코드)',RED]],
-        [['Trade Name\n'],['(원료명)',RED]],
+        [['원료 내부 코드']],
+        [['Trade Name\n'],['(원료 제품명)',RED]],
         [[' ICID'],['(성분의 ICID명)',RED]],
         '성분의 한글명',
         [['RM or ingredient \n% in fla\n'],['(원료함량)',RED]],
@@ -1161,6 +1161,15 @@
   };
 
   // 시트 전체 테두리 제거 후, 13~끝행 / 1~cols 에만 모든 테두리
+  // 헤더 시작행을 지정할 수 있는 테두리 (함량NMPA는 1행부터)
+  function applyGridBorderFrom(sheet,headRow,endRow,cols){
+    const THIN={style:'thin'};
+    const AB={top:THIN,bottom:THIN,left:THIN,right:THIN};
+    for(let r=1;r<headRow;r++)for(let c=1;c<=16;c++)sheet.getRow(r).getCell(c).border={};
+    for(let r=headRow;r<=endRow;r++)for(let c=1;c<=16;c++)sheet.getRow(r).getCell(c).border={};
+    for(let r=headRow;r<=endRow;r++)for(let c=1;c<=cols;c++)sheet.getRow(r).getCell(c).border=JSON.parse(JSON.stringify(AB));
+  }
+
   // 헤더위(1~12) 및 데이터영역(13~endRow)의 테두리를 제거 후, 13~endRow/1~cols에만 부여
   // ※ 계행 아래는 호출 전에 cell.style={} 로 이미 비워둘 것 (ExcelJS 잔재 방지)
   function applyGridBorder(sheet,endRow,cols){
@@ -1206,17 +1215,52 @@
     const agg=computeAgg(ingRows);
     const n=agg.length;
     // --- 함량 시트 (헤더 없음, 1행부터) ---
-    const wq=wb.getWorksheet('함량');
+    // --- 함량NMPA 시트 (헤더 1행, NO/ICID/한글/Actual/기능/CAS/Remark) ---
+    const wq=wb.getWorksheet('함량')||wb.getWorksheet('함량NMPA');
     if(wq){
-      const ref={};for(let c=1;c<=6;c++)ref[c]=JSON.parse(JSON.stringify(wq.getRow(1).getCell(c).style||{}));
+      // 시트명 변경
+      try{wq.name='함량NMPA';}catch(e){}
+      const RED2={color:{argb:'FFFF0000'}};
+      // 1행 헤더 작성 (기존 1행 서식 기반)
+      const hb=JSON.parse(JSON.stringify(wq.getRow(1).getCell(1).style||{}));
+      const NMPA_HDR=[
+        'NO',
+        [[' ICID'],['(성분의 ICID명)',RED2]],
+        '성분의 한글명',
+        [['Actual Wt (%)\n'],['(각성분의 비율)',RED2]],
+        [['Ingredient function\n'],['(성분의 기능)',RED2]],
+        [['CAS No.\n'],['(화학기호)',RED2]],
+        'Remark'
+      ];
+      const baseFont=wq.getRow(1).getCell(1).font||{name:'맑은 고딕',size:10,bold:true};
+      NMPA_HDR.forEach((t,idx)=>{const cell=wq.getRow(1).getCell(idx+1);cell.style=JSON.parse(JSON.stringify(hb));
+        if(typeof t==='string'){cell.value=t;}
+        else{cell.value={richText:t.map(p=>({text:p[0],font:Object.assign({},baseFont,p[1]||{})}))};}});
+      // 열너비
+      const NW=[3.6,39.5,35.4,13.1,22.4,11.1,7.4];NW.forEach((w,i)=>{wq.getColumn(i+1).width=w;});
+      // 14행(데이터 서식 기준) 스냅샷 — 기존 함량시트 2행 서식 사용
+      const dref={};for(let c=1;c<=7;c++)dref[c]=JSON.parse(JSON.stringify(wq.getRow(2).getCell(c).style||{}));
       const last=wq.rowCount;
-      for(let r=1;r<=last;r++)for(let c=1;c<=6;c++)wq.getRow(r).getCell(c).value=null;
-      agg.forEach((a,i)=>{const rr=wq.getRow(1+i);
-        rr.getCell(1).value=i+1;rr.getCell(2).value=a.icid||null;rr.getCell(3).value=a.kor||null;
-        rr.getCell(4).value=a.func||null;rr.getCell(5).value=a.cas||null;rr.getCell(6).value=Math.round(a.sum*1e8)/1e8;
-        for(let c=1;c<=6;c++)rr.getCell(c).style=JSON.parse(JSON.stringify(ref[c]));});
-      // 데이터 아래 잔재 행 style 통째 비우기 (테두리/배경/값 제거)
-      for(let r=agg.length+1;r<=last;r++)for(let c=1;c<=16;c++){const cl=wq.getRow(r).getCell(c);cl.value=null;cl.style={};}
+      // 2행~ 데이터 채우기 (NO 연속, Actual=함량합산)
+      agg.forEach((a,i)=>{const rr=wq.getRow(2+i);
+        rr.getCell(1).value=i+1;
+        rr.getCell(2).value=a.icid||null;
+        rr.getCell(3).value=a.kor||null;
+        rr.getCell(4).value=Math.round(a.sum*1e8)/1e8;
+        rr.getCell(5).value=a.func||null;
+        rr.getCell(6).value=a.cas||null;
+        rr.getCell(7).value=null; // Remark
+        for(let c=1;c<=7;c++)rr.getCell(c).style=JSON.parse(JSON.stringify(dref[c]));});
+      const nmpaSum=2+agg.length;
+      // 계행
+      const sr=wq.getRow(nmpaSum);sr.getCell(1).value='계';sr.getCell(4).value={formula:'SUM(D2:D'+(nmpaSum-1)+')'};
+      for(let c=1;c<=7;c++)sr.getCell(c).style=JSON.parse(JSON.stringify(dref[c]));
+      // 계행 아래 style 비우기
+      for(let r=nmpaSum+1;r<=last;r++)for(let c=1;c<=16;c++){const cl=wq.getRow(r).getCell(c);cl.value=null;cl.style={};}
+      // 테두리: 1행(헤더)~계행, 7열
+      applyGridBorderFrom(wq,1,nmpaSum,7);
+      // 도장
+      addStamp(wq.workbook,wq,nmpaSum-1);
     }
     // --- 외부(함량): 13행헤더, 14행~, 컬럼 NO/ICID/한글/함량%/기능/CAS ---
     fillExternal(wb.getWorksheet('외부(함량)'),agg,true);
