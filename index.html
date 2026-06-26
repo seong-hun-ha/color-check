@@ -282,6 +282,7 @@
     <div class="hint">처방전 엑셀을 넣으면 작성 시트가 채워진 엑셀로 나와요</div></div>
   </div>
   <button class="bigbtn" id="ingPick">📂 처방전 엑셀 선택</button>
+  <button class="bigbtn gray" id="ingReset" style="display:none;margin-top:8px">🔄 초기화 (새 처방전)</button>
   <input type="file" id="ingFile" accept=".xlsx,.xls" style="display:none">
   <div id="ingInfo" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px">
     <div class="wrow"><label>제품명</label><input type="text" id="ingProd" style="width:170px"></div>
@@ -373,7 +374,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.1</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.2</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -966,6 +967,7 @@
     renderIngPrev();
     document.getElementById('ingExportBox').style.display='block';
     document.getElementById('ingGen').style.display='block';
+    document.getElementById('ingReset').style.display='block';
   };
   function renderIngStat(){
     if(!ingRows)return;
@@ -1170,6 +1172,19 @@
     }
     return a;
   }
+
+  document.getElementById('ingReset').onclick=()=>{
+    ingRows=null;
+    ['ingInfo','ingMiss','ingPrev','ingExportBox','ingGen','ingReset'].forEach(id=>document.getElementById(id).style.display='none');
+    document.getElementById('ingProd').value='';
+    document.getElementById('ingDate').value='';
+    document.getElementById('ingStat').innerHTML='';
+    document.getElementById('ingMissList').innerHTML='';
+    document.getElementById('ingPrev').innerHTML='';
+    document.getElementById('ingExport').checked=false;
+    document.getElementById('ingExportPick').style.display='none';
+    document.getElementById('ingExportList').innerHTML='';
+  };
 
   // ── 부자재 로스율 ──
   const tabLoss=document.getElementById('tabLoss');
