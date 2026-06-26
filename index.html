@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.0</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.1</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1131,13 +1131,15 @@
     // --- 함량 시트 (헤더 없음, 1행부터) ---
     const wq=wb.getWorksheet('함량');
     if(wq){
-      const ref={};for(let c=1;c<=6;c++){const cl=wq.getRow(1).getCell(c);ref[c]={font:cl.font,border:cl.border,alignment:cl.alignment,numFmt:cl.numFmt};}
+      const ref={};for(let c=1;c<=6;c++)ref[c]=JSON.parse(JSON.stringify(wq.getRow(1).getCell(c).style||{}));
       const last=wq.rowCount;
       for(let r=1;r<=last;r++)for(let c=1;c<=6;c++)wq.getRow(r).getCell(c).value=null;
       agg.forEach((a,i)=>{const rr=wq.getRow(1+i);
         rr.getCell(1).value=i+1;rr.getCell(2).value=a.icid||null;rr.getCell(3).value=a.kor||null;
         rr.getCell(4).value=a.func||null;rr.getCell(5).value=a.cas||null;rr.getCell(6).value=Math.round(a.sum*1e8)/1e8;
-        for(let c=1;c<=6;c++){const cl=rr.getCell(c);const st=ref[c];if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;if(st.alignment)cl.alignment=st.alignment;if(st.numFmt)cl.numFmt=st.numFmt;}});
+        for(let c=1;c<=6;c++)rr.getCell(c).style=JSON.parse(JSON.stringify(ref[c]));});
+      // 데이터 아래 잔재 행 style 통째 비우기 (테두리/배경/값 제거)
+      for(let r=agg.length+1;r<=last;r++)for(let c=1;c<=16;c++){const cl=wq.getRow(r).getCell(c);cl.value=null;cl.style={};}
     }
     // --- 외부(함량): 13행헤더, 14행~, 컬럼 NO/ICID/한글/함량%/기능/CAS ---
     fillExternal(wb.getWorksheet('외부(함량)'),agg,true);
