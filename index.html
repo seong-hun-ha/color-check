@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.6</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.7</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1002,15 +1002,34 @@
       ws.getCell('A10').value='Date : '+(document.getElementById('ingDate').value||'');
       const START=14;
       const n=ingRows.length;
-      // === 12컬럼 헤더 재작성 (13행) ===
+      // === 12컬럼 헤더 재작성 (13행) — 괄호 한글 설명은 빨간색(rich text) ===
       // A=NO B=원료사 C=원료코드 D=TradeName E=ICID F=한글 G=원료함량 H=조성% I=Actual J=기능 K=CAS L=Remark
-      const HEADERS=['NO','Product\nCompany\n(원료사)','RM Code\n(원료코드)','Trade Name\n(원료명)',' ICID(성분의 ICID명)','성분의 한글명','RM or ingredient \n% in fla\n(원료함량)','ingredients \n% in RM\n(원료 중 성분함량)','Actual Wt (%)\n(각성분의 비율)','Ingredient function\n(성분의 기능)','CAS No.\n(화학기호)','Remark'];
-      // 기존 13행 헤더 서식(B열 기준)을 새 헤더 셀에 복제
+      const RED={color:{argb:'FFFF0000'}};
+      // [영문/숫자 부분(검정), 괄호한글(빨강)] 형태의 rich text 정의
+      const HEADERS=[
+        'NO',
+        [['Product\nCompany\n'],['(원료사)',RED]],
+        [['RM Code\n'],['(원료코드)',RED]],
+        [['Trade Name\n'],['(원료명)',RED]],
+        [[' ICID'],['(성분의 ICID명)',RED]],
+        '성분의 한글명',
+        [['RM or ingredient \n% in fla\n'],['(원료함량)',RED]],
+        [['ingredients \n% in RM\n'],['(원료 중 성분함량)',RED]],
+        [['Actual Wt (%)\n'],['(각성분의 비율)',RED]],
+        [['Ingredient function\n'],['(성분의 기능)',RED]],
+        [['CAS No.\n'],['(화학기호)',RED]],
+        'Remark'
+      ];
       const hdrStyle=JSON.parse(JSON.stringify(ws.getRow(13).getCell(2).style||{}));
       const hdrA=JSON.parse(JSON.stringify(ws.getRow(13).getCell(1).style||{}));
-      HEADERS.forEach((t,idx)=>{const c=idx+1;const cell=ws.getRow(13).getCell(c);cell.value=t;cell.style=JSON.parse(JSON.stringify(c===1?hdrA:hdrStyle));});
-      // 열너비 설정
-      const WIDTHS=[3.6, 16, 14, 24, 30, 16, 11, 11, 9, 18, 12, 10];
+      HEADERS.forEach((t,idx)=>{const c=idx+1;const cell=ws.getRow(13).getCell(c);
+        cell.style=JSON.parse(JSON.stringify(c===1?hdrA:hdrStyle));
+        if(typeof t==='string'){cell.value=t;}
+        else{const baseFont=cell.font||{};
+          cell.value={richText:t.map(part=>({text:part[0],font:Object.assign({},baseFont,part[1]||{})}))};}
+      });
+      // 열너비 설정 (I=Actual 살짝 넓힘)
+      const WIDTHS=[3.6, 16, 14, 24, 30, 16, 11, 11, 12, 18, 12, 10];
       WIDTHS.forEach((w,idx)=>{ws.getColumn(idx+1).width=w;});
       // 14행 서식 스냅샷 — 기존 양식의 각 컬럼 역할에 맞게 재배치
       // 기존: 1NO 2ICID 3한글 4원료함량 5조성% 6Actual 7기능 8CAS 9Remark
