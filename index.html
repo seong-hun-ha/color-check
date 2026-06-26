@@ -374,7 +374,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.3</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.4</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1000,10 +1000,10 @@
       ws.getCell('A10').value='Date : '+(document.getElementById('ingDate').value||'');
       const START=14;
       const n=ingRows.length;
-      // 14행 서식 스냅샷 (9컬럼: A~I)
+      // 14행 서식 스냅샷 (style 통째 deep copy — fill/border/font/align/numFmt 전부)
       const styleRef={};
       for(let c=1;c<=9;c++){const cl=ws.getRow(START).getCell(c);
-        styleRef[c]={font:cl.font,border:cl.border,alignment:cl.alignment,numFmt:cl.numFmt};}
+        styleRef[c]=JSON.parse(JSON.stringify(cl.style||{}));}
       const refH=ws.getRow(START).height;
       // 14행 이후 양식 기존 병합 해제
       const toUn=[];
@@ -1032,9 +1032,7 @@
         rr.getCell(7).value=r.func||null;
         rr.getCell(8).value=r.cas||null;
         rr.getCell(9).value=r.remark||null;
-        for(let c=1;c<=9;c++){const cl=rr.getCell(c);const st=styleRef[c];
-          if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;
-          if(st.alignment)cl.alignment=st.alignment;if(st.numFmt)cl.numFmt=st.numFmt;}
+        for(let c=1;c<=9;c++){rr.getCell(c).style=JSON.parse(JSON.stringify(styleRef[c]));}
         if(refH)rr.height=refH;
       });
       // D열(원료함량) 블록 세로 병합
@@ -1055,8 +1053,7 @@
       sumRow.getCell(1).value='계';
       sumRow.getCell(4).value={formula:'SUM(D'+START+':D'+lastData+')'};
       sumRow.getCell(6).value={formula:'SUM(F'+START+':F'+lastData+')'};
-      for(let c=1;c<=9;c++){const st=styleRef[c];const cl=sumRow.getCell(c);
-        if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;}
+      for(let c=1;c<=9;c++){sumRow.getCell(c).style=JSON.parse(JSON.stringify(styleRef[c]));}
       // 인증문구 재배치 (굵게, 테두리 없음)
       const noBorder={top:{style:null},bottom:{style:null},left:{style:null},right:{style:null}};
       let crow=sumR+1;
@@ -1146,7 +1143,7 @@
     if(!ws)return;
     const START=14;
     const ref={};const cols=withPct?6:5; // withPct: NO/ICID/한글/함량%/기능/CAS, else NO/ICID/한글/기능/CAS
-    for(let c=1;c<=cols;c++){const cl=ws.getRow(START).getCell(c);ref[c]={font:cl.font,border:cl.border,alignment:cl.alignment,numFmt:cl.numFmt};}
+    for(let c=1;c<=cols;c++){const cl=ws.getRow(START).getCell(c);ref[c]=JSON.parse(JSON.stringify(cl.style||{}));}
     const refH=ws.getRow(START).height;
     // 14행 이후 병합 해제
     const toUn=[];(ws.model.merges||[]).slice().forEach(m=>{const mm=/[A-Z]+(\d+):/.exec(m);if(mm&&parseInt(mm[1])>=14)toUn.push(m);});
@@ -1159,14 +1156,14 @@
       rr.getCell(1).value=i+1;rr.getCell(2).value=a.icid||null;rr.getCell(3).value=a.kor||null;
       if(withPct){rr.getCell(4).value=Math.round(a.sum*1e8)/1e8;rr.getCell(5).value=a.func||null;rr.getCell(6).value=a.cas||null;}
       else{rr.getCell(4).value=a.func||null;rr.getCell(5).value=a.cas||null;}
-      for(let c=1;c<=cols;c++){const cl=rr.getCell(c);const st=ref[c];if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;if(st.alignment)cl.alignment=st.alignment;if(st.numFmt)cl.numFmt=st.numFmt;}
+      for(let c=1;c<=cols;c++){rr.getCell(c).style=JSON.parse(JSON.stringify(ref[c]));}
       if(refH)rr.height=refH;});
     let crow=START+agg.length;
     // 계 행 (외부 시트도 계행 있음, 14행 서식 복제)
     const sumRow=ws.getRow(crow);
     sumRow.getCell(1).value='계';
     if(withPct){sumRow.getCell(4).value={formula:'SUM(D'+START+':D'+(crow-1)+')'};}
-    for(let c=1;c<=cols;c++){const cl=sumRow.getCell(c);const st=ref[c];if(st.font)cl.font=st.font;if(st.border)cl.border=st.border;if(st.alignment)cl.alignment=st.alignment;if(st.numFmt)cl.numFmt=st.numFmt;}
+    for(let c=1;c<=cols;c++){sumRow.getCell(c).style=JSON.parse(JSON.stringify(ref[c]));}
     crow++;
     // 인증문구 (굵게, 테두리 없음)
     const noBorder={top:{style:null},bottom:{style:null},left:{style:null},right:{style:null}};
