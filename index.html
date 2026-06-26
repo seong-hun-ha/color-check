@@ -381,7 +381,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v8.0</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v8.1</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1020,11 +1020,13 @@
           curN=r.rmname||'(원료명)';
           ph+='<div style="margin-top:10px;padding:6px 8px;background:#fff3d6;border-radius:8px;font-weight:800;font-size:12.5px">⚠ '+curN+' <span style="font-weight:600;color:var(--dim)">— 처방전과 성분 수가 달라요. 뺄 성분을 체크하세요</span></div>';
         }
-        ph+='<label style="display:flex;align-items:center;gap:8px;padding:6px 4px 6px 12px;border-bottom:1px solid #f0e2c0;font-size:12.5px">'
+        ph+='<div style="display:flex;align-items:center;gap:8px;padding:6px 4px 6px 12px;border-bottom:1px solid #f0e2c0;font-size:12.5px">'
+          +'<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer">'
           +'<input type="checkbox" data-idx="'+idx+'" '+(r.excluded?'checked':'')+' style="width:18px;height:18px;flex-shrink:0">'
           +'<span style="flex:1;min-width:0">'+(r.icid||'(성분명)')+' <span style="color:var(--dim)">'+(r.kor||'')+'</span></span>'
+          +'</label>'
           +'<input type="number" inputmode="decimal" data-pidx="'+idx+'" placeholder="조성%" value="'+(r.comppct!==''&&r.comppct!=null?r.comppct:'')+'" style="width:74px;flex-shrink:0;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:12px">'
-          +'</label>';
+          +'</div>';
       });
       document.getElementById('ingPartialList').innerHTML=ph;
       const updPartialSum=()=>{
