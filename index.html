@@ -301,6 +301,12 @@
     <div id="ingPartialSum" style="font-size:12px;color:var(--dim);margin-top:8px;line-height:1.7"></div>
     <div style="font-size:11.5px;color:var(--dim);margin-top:8px">원료명은 맞지만 처방전과 DB의 성분 수가 달라요. 성분이 더 많은 쪽을 불러왔으니, 뺄 성분을 체크하고 남은 성분의 조성%를 합 100%가 되도록 직접 맞춰주세요. (이번 생성에만 적용)</div>
   </div>
+  <div id="ingCodeOnly" style="display:none;margin-top:10px;background:#f0f7ff;border:1.5px solid #4a90d9;border-radius:16px;padding:14px">
+    <div style="font-size:13px;font-weight:800;color:#2b6cb0;margin-bottom:8px">🔎 원료코드 일치·원료명 불일치 — 확인</div>
+    <div id="ingCodeOnlyList" style="font-size:12.5px;line-height:1.8"></div>
+    <div id="ingCodeOnlySum" style="font-size:12px;color:var(--dim);margin-top:8px;line-height:1.7"></div>
+    <div style="font-size:11.5px;color:var(--dim);margin-top:8px">원료코드는 DB와 같지만 원료명 표기가 달라요. DB 등록 성분을 불러왔으니, 맞는지 확인하고 필요하면 성분을 빼거나 조성%를 수정하세요. (이번 생성에만 적용)</div>
+  </div>
   <div id="ingPrev" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;max-height:320px;overflow:auto;font-size:11px"></div>
   <div id="ingExportBox" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px">
     <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700"><input type="checkbox" id="ingExport" style="width:20px;height:20px"> 수출본도 만들기</label>
@@ -381,7 +387,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v8.1</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v8.2</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -855,20 +861,17 @@
       // ① 원료명 정확 일치 + 성분 개수 일치 → 정상
       const exact=c.find(v=>v.name_ec&&norm(v.name_ec)===nm&&v.ing.length===nrows);
       if(exact)return exact;
-      // 변형 1개인데 성분수만 다름: 원료명 따져서 partial
-      if(c.length===1){
-        if(c[0].name_ec&&norm(c[0].name_ec)===nm)return {...c[0],_partial:true};
-        return null;
-      }
-      // ② 원료명만 일치(성분수 다름) → partial (성분 더 많은 변형 채택)
+      // ② 원료명 일치(성분수 다름) → partial (노란색)
       const nameHits=c.filter(v=>v.name_ec&&norm(v.name_ec)===nm);
       if(nameHits.length){
         const best=nameHits.reduce((a,b)=>b.ing.length>a.ing.length?b:a);
         return {...best,_partial:true};
       }
-      return null;
+      // ③ 코드는 있으나 원료명이 다름 → codeOnly (파란색). 성분 더 많은 변형 채택
+      const best=c.reduce((a,b)=>b.ing.length>a.ing.length?b:a);
+      return {...best,_codeOnly:true};
     }
-    // 신규 시트
+    // 신규 시트 (코드 없음)
     for(const nm2 in COMP.new){
       if(name&&norm(nm2)===norm(name)){
         const v=COMP.new[nm2];
@@ -948,6 +951,15 @@
           rows.push({no,maker:i===0?rm.maker:'',rcode:i===0?rm.code:'',trade:i===0?rm.name:'',rmname:i===0?rm.name:'',icid:rr.icid,kor:rr.kor,
             rmpct:i===0?rm.total:'',comppct:'',func:k?k.func:'',cas:k?k.cas:'',remark:'DB 미등록',
             missing:true,blockFirst:i===0});});
+        continue;
+      }
+      // _codeOnly: 코드는 같으나 원료명이 다름 → DB 성분 불러옴 + 파란 박스에서 확인
+      if(v._codeOnly){
+        v.ing.forEach((ing,i)=>{no++;
+          rows.push({no,maker:i===0?rm.maker:'',rcode:i===0?rm.code:'',trade:i===0?rm.name:'',rmname:i===0?rm.name:'',
+            icid:ing.icid||'',kor:ing.kor||'',
+            rmpct:i===0?rm.total:'',comppct:ing.pct,func:ing.func||'',cas:ing.cas||'',
+            remark:'',codeOnly:true,dbName:v.name_ec,blockFirst:i===0,excluded:false});});
         continue;
       }
       // _partial: 원료명은 맞으나 성분수 다름 → 성분 더 많은 쪽 사용 + 제외 체크 허용
@@ -1045,6 +1057,41 @@
       });
       updPartialSum();
     }else if(pb)pb.style.display='none';
+    // 코드 동일·원료명 불일치(codeOnly) 확인 UI (파란색)
+    const cb2=document.getElementById('ingCodeOnly');
+    const codeRows=rows.filter(r=>r.codeOnly);
+    if(cb2&&codeRows.length){
+      cb2.style.display='block';
+      let ch='';let curC=null;
+      rows.forEach((r,idx)=>{
+        if(!r.codeOnly)return;
+        if(r.blockFirst||(r.rmpct!==''&&r.rmpct!=null)){
+          curC=r.rmname||'(원료명)';
+          ch+='<div style="margin-top:10px;padding:6px 8px;background:#dceeff;border-radius:8px;font-weight:800;font-size:12.5px">🔎 '+curC+' <span style="font-weight:600;color:var(--dim)">→ DB등록명: '+(r.dbName||'')+'</span></div>';
+        }
+        ch+='<div style="display:flex;align-items:center;gap:8px;padding:6px 4px 6px 12px;border-bottom:1px solid #cfe2f5;font-size:12.5px">'
+          +'<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer">'
+          +'<input type="checkbox" data-cidx="'+idx+'" '+(r.excluded?'checked':'')+' style="width:18px;height:18px;flex-shrink:0">'
+          +'<span style="flex:1;min-width:0">'+(r.icid||'(성분명)')+' <span style="color:var(--dim)">'+(r.kor||'')+'</span></span>'
+          +'</label>'
+          +'<input type="number" inputmode="decimal" data-cpidx="'+idx+'" placeholder="조성%" value="'+(r.comppct!==''&&r.comppct!=null?r.comppct:'')+'" style="width:74px;flex-shrink:0;padding:6px;border:1px solid var(--line);border-radius:8px;font-size:12px">'
+          +'</div>';
+      });
+      document.getElementById('ingCodeOnlyList').innerHTML=ch;
+      const updCodeSum=()=>{
+        const groups={};
+        rows.forEach(r=>{if(r.codeOnly){const key=r.rmname||'';if(!groups[key])groups[key]=0;if(!r.excluded&&r.comppct!==''&&r.comppct!=null)groups[key]+=Number(r.comppct);}});
+        const w=document.getElementById('ingCodeOnlySum');
+        if(w)w.innerHTML=Object.entries(groups).map(([k,v])=>{const ok=Math.abs(v-100)<0.01;return (ok?'✓ ':'⚠ ')+k+': '+(Math.round(v*1000)/1000)+'%';}).join('<br>');
+      };
+      document.getElementById('ingCodeOnlyList').querySelectorAll('input[type=checkbox]').forEach(cb=>{
+        cb.onchange=()=>{const i=+cb.dataset.cidx;ingRows[i].excluded=cb.checked;renderIngStat();renderIngPrev();updCodeSum();};
+      });
+      document.getElementById('ingCodeOnlyList').querySelectorAll('input[data-cpidx]').forEach(inp=>{
+        inp.oninput=()=>{const i=+inp.dataset.cpidx;ingRows[i].comppct=(inp.value===''?'':parseFloat(inp.value));renderIngStat();renderIngPrev();updCodeSum();};
+      });
+      updCodeSum();
+    }else if(cb2)cb2.style.display='none';
     renderIngPrev();
     document.getElementById('ingExportBox').style.display='block';
     document.getElementById('ingGen').style.display='block';
@@ -1482,7 +1529,7 @@
 
   document.getElementById('ingReset').onclick=()=>{
     ingRows=null;
-    ['ingInfo','ingMiss','ingPrev','ingExportBox','ingGen','ingReset'].forEach(id=>document.getElementById(id).style.display='none');
+    ['ingInfo','ingMiss','ingPartial','ingCodeOnly','ingPrev','ingExportBox','ingGen','ingReset'].forEach(id=>document.getElementById(id).style.display='none');
     document.getElementById('ingProd').value='';
     document.getElementById('ingDate').value='';
     document.getElementById('ingStat').innerHTML='';
