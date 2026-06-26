@@ -295,6 +295,11 @@
     <div id="ingMissList" style="font-size:12.5px;line-height:1.8"></div>
     <div style="font-size:11.5px;color:var(--dim);margin-top:8px">조성%를 입력하면 작성 시트에 반영됩니다. 기능·CAS는 같은 성분이 있으면 자동으로 채워졌어요. (이번 생성에만 적용)</div>
   </div>
+  <div id="ingPartial" style="display:none;margin-top:10px;background:#fffaf0;border:1.5px solid #e0a800;border-radius:16px;padding:14px">
+    <div style="font-size:13px;font-weight:800;color:#b8860b;margin-bottom:8px">⚠ 성분 수 불일치 — 뺄 성분 선택</div>
+    <div id="ingPartialList" style="font-size:12.5px;line-height:1.8"></div>
+    <div style="font-size:11.5px;color:var(--dim);margin-top:8px">원료명은 맞지만 처방전과 DB의 성분 수가 달라요. 성분이 더 많은 쪽을 불러왔으니, 필요 없는 성분을 체크해서 빼세요. (이번 생성에만 적용)</div>
+  </div>
   <div id="ingPrev" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;max-height:320px;overflow:auto;font-size:11px"></div>
   <div id="ingExportBox" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px">
     <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700"><input type="checkbox" id="ingExport" style="width:20px;height:20px"> 수출본도 만들기</label>
@@ -375,7 +380,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.8</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.9</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -845,20 +850,30 @@
     const c=COMP.comp[code];
     const norm=s=>(s||'').trim().replace(/\s+/g,' ').toLowerCase();
     if(c){
-      if(c.length===1){
-        // 변형 1개라도 성분 개수까지 맞아야 인정
-        return c[0].ing.length===nrows?c[0]:null;
-      }
       const nm=norm(name);
-      // 원료명 정확 일치 + 성분 개수 일치 (둘 다 만족)
-      const hit=c.find(v=>v.name_ec&&norm(v.name_ec)===nm&&v.ing.length===nrows);
-      if(hit)return hit;
-      // 조건 미충족 → 미등록 처리
+      // ① 원료명 정확 일치 + 성분 개수 일치 → 정상
+      const exact=c.find(v=>v.name_ec&&norm(v.name_ec)===nm&&v.ing.length===nrows);
+      if(exact)return exact;
+      // 변형 1개인데 성분수만 다름: 원료명 따져서 partial
+      if(c.length===1){
+        if(c[0].name_ec&&norm(c[0].name_ec)===nm)return {...c[0],_partial:true};
+        return null;
+      }
+      // ② 원료명만 일치(성분수 다름) → partial (성분 더 많은 변형 채택)
+      const nameHits=c.filter(v=>v.name_ec&&norm(v.name_ec)===nm);
+      if(nameHits.length){
+        const best=nameHits.reduce((a,b)=>b.ing.length>a.ing.length?b:a);
+        return {...best,_partial:true};
+      }
       return null;
     }
-    // 신규 시트: 원료명 정확 일치 + 성분 개수 일치
-    for(const nm in COMP.new){
-      if(name&&norm(nm)===norm(name)&&COMP.new[nm].ing.length===nrows)return {ing:COMP.new[nm].ing,name_ec:nm};
+    // 신규 시트
+    for(const nm2 in COMP.new){
+      if(name&&norm(nm2)===norm(name)){
+        const v=COMP.new[nm2];
+        if(v.ing.length===nrows)return {ing:v.ing,name_ec:nm2};
+        return {ing:v.ing,name_ec:nm2,_partial:true};
+      }
     }
     return null;
   }
@@ -934,6 +949,23 @@
             missing:true,blockFirst:i===0});});
         continue;
       }
+      // _partial: 원료명은 맞으나 성분수 다름 → 성분 더 많은 쪽 사용 + 제외 체크 허용
+      if(v._partial){
+        const dbIng=v.ing;                  // DB 변형 성분
+        const fmIng=rm.rows;                // 처방전 성분
+        const useDB=dbIng.length>=fmIng.length;
+        const src=useDB?dbIng:fmIng;
+        src.forEach((ing,i)=>{no++;
+          const icid=ing.icid||'';const kor=ing.kor||'';
+          const k=icid?knownByIcid[icid.toLowerCase()]:null;
+          rows.push({no,maker:i===0?rm.maker:'',rcode:i===0?rm.code:'',trade:i===0?rm.name:'',rmname:i===0?rm.name:'',
+            icid,kor,
+            rmpct:i===0?rm.total:'',
+            comppct:(useDB?ing.pct:(k?'':'')) ,  // DB면 pct, 처방전출처면 비움(사용자입력)
+            func:(ing.func)||(k?k.func:''),cas:(ing.cas)||(k?k.cas:''),
+            remark:'',partial:true,blockFirst:i===0,excluded:false});});
+        continue;
+      }
       v.ing.forEach((ing,i)=>{no++;
         const fn=ing.func||'';
         rows.push({no,maker:i===0?rm.maker:'',rcode:i===0?rm.code:'',trade:i===0?rm.name:'',rmname:i===0?rm.name:'',icid:ing.icid||'',kor:ing.kor||'',
@@ -975,6 +1007,28 @@
           renderIngStat();renderIngPrev();};
       });
     }else mb.style.display='none';
+    // 성분수 불일치(partial) 제외 선택 UI
+    const pb=document.getElementById('ingPartial');
+    const partRows=rows.filter(r=>r.partial);
+    if(pb&&partRows.length){
+      pb.style.display='block';
+      let ph='';let curN=null;
+      rows.forEach((r,idx)=>{
+        if(!r.partial)return;
+        if(r.blockFirst||(r.rmpct!==''&&r.rmpct!=null)){
+          curN=r.rmname||'(원료명)';
+          ph+='<div style="margin-top:10px;padding:6px 8px;background:#fff3d6;border-radius:8px;font-weight:800;font-size:12.5px">⚠ '+curN+' <span style="font-weight:600;color:var(--dim)">— 처방전과 성분 수가 달라요. 뺄 성분을 체크하세요</span></div>';
+        }
+        ph+='<label style="display:flex;align-items:center;gap:8px;padding:6px 4px 6px 12px;border-bottom:1px solid #f0e2c0;font-size:12.5px">'
+          +'<input type="checkbox" data-idx="'+idx+'" '+(r.excluded?'checked':'')+' style="width:18px;height:18px">'
+          +'<span>'+(r.icid||'(성분명)')+' <span style="color:var(--dim)">'+(r.kor||'')+'</span>'+(r.comppct!==''&&r.comppct!=null?' <span style="color:var(--dim)">('+r.comppct+'%)</span>':'')+'</span>'
+          +'</label>';
+      });
+      document.getElementById('ingPartialList').innerHTML=ph;
+      document.getElementById('ingPartialList').querySelectorAll('input[type=checkbox]').forEach(cb=>{
+        cb.onchange=()=>{const i=+cb.dataset.idx;ingRows[i].excluded=cb.checked;renderIngStat();renderIngPrev();};
+      });
+    }else if(pb)pb.style.display='none';
     renderIngPrev();
     document.getElementById('ingExportBox').style.display='block';
     document.getElementById('ingGen').style.display='block';
@@ -1000,6 +1054,35 @@
   document.getElementById('ingGen').onclick=async()=>{
     if(!ingRows||!ingRows.length){alert('처방전을 먼저 불러와주세요.');return;}
     const btn=document.getElementById('ingGen');btn.textContent='생성 중…';
+    // 제외 체크된 성분 빼고, 블록(원료) 단위로 NO·원료정보 정리
+    const _ingBackup=ingRows;
+    let kept=ingRows.filter(r=>!r.excluded);
+    // 제외로 블록 첫 행(원료함량 보유행)이 사라진 경우, 같은 원료의 다음 남은 행에 원료정보 승계
+    // 원료 구분: rmname 기준. 각 원료의 첫 남은 행에 maker/rcode/trade/rmpct가 있도록
+    {
+      const seen={};
+      // 원본에서 원료별 대표정보 수집 (rmpct 있는 행=블록 첫 행)
+      const blockInfo={};
+      _ingBackup.forEach(r=>{if(r.rmpct!==''&&r.rmpct!=null){const key=r.rmname||('_'+r.no);if(!(key in blockInfo))blockInfo[key]={maker:r.maker,rcode:r.rcode,trade:r.trade,rmpct:r.rmpct};}});
+      kept.forEach(r=>{
+        const key=r.rmname||('_'+r.no);
+        if(!seen[key]){seen[key]=true;
+          // 이 원료의 첫 남은 행: 원료정보 채워주기 (이미 있으면 유지)
+          if((r.rmpct===''||r.rmpct==null)&&blockInfo[key]){
+            r.maker=r.maker||blockInfo[key].maker;
+            r.rcode=r.rcode||blockInfo[key].rcode;
+            r.trade=r.trade||blockInfo[key].trade;
+            r.rmpct=blockInfo[key].rmpct;
+          }
+        }else{
+          // 같은 원료의 둘째 이후 행: 원료정보 비움(병합 위해)
+          r.maker='';r.rcode='';r.trade='';r.rmpct='';
+        }
+      });
+    }
+    // NO 재부여
+    kept=kept.map((r,i)=>({...r,no:i+1}));
+    ingRows=kept;
     try{
       const wb=new ExcelJS.Workbook();
       const bin=atob(window.INGRED_TEMPLATE_B64);
@@ -1154,9 +1237,11 @@
       a.click();URL.revokeObjectURL(a.href);
       btn.textContent='✓ 생성 완료! 다시 생성';
       setTimeout(()=>btn.textContent='📥 전성분표 엑셀 생성',2500);
+      ingRows=_ingBackup;
     }catch(err){
       alert('엑셀 생성 실패: '+(err.message||err));
       btn.textContent='📥 전성분표 엑셀 생성';
+      ingRows=_ingBackup;
     }
   };
 
