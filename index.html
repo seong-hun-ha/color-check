@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.1</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.2</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1014,25 +1014,19 @@
       // 로고영역(1~6행)과 텍스트행(7~12행) A:L 재병합
       try{ws.mergeCells(1,1,6,12);}catch(e){}
       for(let r=7;r<=12;r++){try{ws.mergeCells(r,1,r,12);}catch(e){}}
-      // 로고 이미지를 비율 유지하며 12열 가운데 정렬 (oneCellAnchor 고정크기)
+      // 로고 이미지를 사용자 지정 위치로 고정 (twoCellAnchor)
       try{
         const logoImg=ws.getImages().find(im=>im.range.tl.nativeRow<6);
         if(logoImg){
           const media=wb.media[logoImg.imageId];
           const buf=media.buffer;
-          // 로고 원본 비율 (742x269 ≈ 2.758). 표시 폭 380px 고정
-          const imgW=380, imgH=Math.round(imgW*269/742);
-          // 12열 총 픽셀폭 계산 (열너비 문자→픽셀: w*7+5)
-          const W=[3.6,16,14,24,30,16,11,11,12,18,12,10];
-          const colPx=W.map(w=>Math.round(w*7)+5);
-          const totalPx=colPx.reduce((a,b)=>a+b,0);
-          const startPx=(totalPx-imgW)/2;
-          let acc=0,col=0,off=0;
-          for(let c=0;c<12;c++){if(acc+colPx[c]>startPx){col=c;off=startPx-acc;break;}acc+=colPx[c];}
-          // 기존 로고 제거 후 가운데에 재삽입
           ws._media=ws._media.filter(m=>!(m.range&&m.range.tl&&m.range.tl.nativeRow<6));
           const imgId=wb.addImage({buffer:buf,extension:media.extension});
-          ws.addImage(imgId,{tl:{col:col+off/colPx[col],row:0.3},ext:{width:imgW,height:imgH},editAs:'oneCell'});
+          ws.addImage(imgId,{
+            tl:{col:4,row:0,nativeCol:4,nativeColOff:647700,nativeRow:0,nativeRowOff:0},
+            br:{col:6,row:5,nativeCol:6,nativeColOff:425449,nativeRow:5,nativeRowOff:200025},
+            editAs:'oneCell'
+          });
         }
       }catch(e){}
       // 헤더 정보
