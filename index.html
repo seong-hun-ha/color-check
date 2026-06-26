@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.5</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.6</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -896,6 +896,7 @@
     // 원료 블록 파싱
     const rms=[];let cur=null;
     for(let r=10;r<endrow;r++){
+      const maker=String(getC(r,2)||'').trim();
       const code=String(getC(r,3)||'').trim();
       const rmname=String(getC(r,4)||'').trim();
       const icid=String(getC(r,5)||'').trim();
@@ -903,7 +904,7 @@
       const g=getNum(r,7);
       if(!icid&&!kor)continue;
       if(!isNaN(g)){
-        cur={code,name:rmname,total:g,rows:[]};rms.push(cur);
+        cur={maker,code,name:rmname,total:g,rows:[]};rms.push(cur);
       }
       if(cur)cur.rows.push({icid,kor});
     }
@@ -919,14 +920,14 @@
         miss.push((rm.code||'')+' '+rm.name);
         rm.rows.forEach((rr,i)=>{no++;
           const k=rr.icid?knownByIcid[rr.icid.toLowerCase()]:null;
-          rows.push({no,rmname:i===0?rm.name:'',icid:rr.icid,kor:rr.kor,
+          rows.push({no,maker:i===0?rm.maker:'',rcode:i===0?rm.code:'',trade:i===0?rm.name:'',rmname:i===0?rm.name:'',icid:rr.icid,kor:rr.kor,
             rmpct:i===0?rm.total:'',comppct:'',func:k?k.func:'',cas:k?k.cas:'',remark:'DB 미등록',
             missing:true,blockFirst:i===0});});
         continue;
       }
       v.ing.forEach((ing,i)=>{no++;
         const fn=ing.func||'';
-        rows.push({no,rmname:i===0?rm.name:'',icid:ing.icid||'',kor:ing.kor||'',
+        rows.push({no,maker:i===0?rm.maker:'',rcode:i===0?rm.code:'',trade:i===0?rm.name:'',rmname:i===0?rm.name:'',icid:ing.icid||'',kor:ing.kor||'',
           rmpct:i===0?rm.total:'',comppct:ing.pct,func:fn,cas:ing.cas||'',remark:''});});
     }
     ingRows=rows;
@@ -1001,10 +1002,32 @@
       ws.getCell('A10').value='Date : '+(document.getElementById('ingDate').value||'');
       const START=14;
       const n=ingRows.length;
-      // 14행 서식 스냅샷 (style 통째 deep copy — fill/border/font/align/numFmt 전부)
-      const styleRef={};
-      for(let c=1;c<=9;c++){const cl=ws.getRow(START).getCell(c);
-        styleRef[c]=JSON.parse(JSON.stringify(cl.style||{}));}
+      // === 12컬럼 헤더 재작성 (13행) ===
+      // A=NO B=원료사 C=원료코드 D=TradeName E=ICID F=한글 G=원료함량 H=조성% I=Actual J=기능 K=CAS L=Remark
+      const HEADERS=['NO','Product\nCompany\n(원료사)','RM Code\n(원료코드)','Trade Name\n(원료명)',' ICID(성분의 ICID명)','성분의 한글명','RM or ingredient \n% in fla\n(원료함량)','ingredients \n% in RM\n(원료 중 성분함량)','Actual Wt (%)\n(각성분의 비율)','Ingredient function\n(성분의 기능)','CAS No.\n(화학기호)','Remark'];
+      // 기존 13행 헤더 서식(B열 기준)을 새 헤더 셀에 복제
+      const hdrStyle=JSON.parse(JSON.stringify(ws.getRow(13).getCell(2).style||{}));
+      const hdrA=JSON.parse(JSON.stringify(ws.getRow(13).getCell(1).style||{}));
+      HEADERS.forEach((t,idx)=>{const c=idx+1;const cell=ws.getRow(13).getCell(c);cell.value=t;cell.style=JSON.parse(JSON.stringify(c===1?hdrA:hdrStyle));});
+      // 열너비 설정
+      const WIDTHS=[3.6, 16, 14, 24, 30, 16, 11, 11, 9, 18, 12, 10];
+      WIDTHS.forEach((w,idx)=>{ws.getColumn(idx+1).width=w;});
+      // 14행 서식 스냅샷 — 기존 양식의 각 컬럼 역할에 맞게 재배치
+      // 기존: 1NO 2ICID 3한글 4원료함량 5조성% 6Actual 7기능 8CAS 9Remark
+      const oldS={};for(let c=1;c<=9;c++)oldS[c]=JSON.parse(JSON.stringify(ws.getRow(START).getCell(c).style||{}));
+      // 새 컬럼별 서식 매핑 (기존 역할 → 새 위치)
+      const styleRef={
+        1:oldS[1],            // NO
+        2:oldS[3], 3:oldS[3], 4:oldS[3], // 원료사/코드/TradeName ← 한글(텍스트 좌측) 서식 재활용
+        5:oldS[2],            // ICID
+        6:oldS[3],            // 한글
+        7:oldS[4],            // 원료함량 ← 기존 D
+        8:oldS[5],            // 조성% ← 기존 E
+        9:oldS[6],            // Actual ← 기존 F
+        10:oldS[7],           // 기능
+        11:oldS[8],           // CAS
+        12:oldS[9]            // Remark
+      };
       const refH=ws.getRow(START).height;
       // 14행 이후 양식 기존 병합 해제
       const toUn=[];
@@ -1015,57 +1038,60 @@
       const certTexts=[];
       for(let r=START;r<=origLast;r++){const v=ws.getRow(r).getCell(1).value;
         if(v&&typeof v==='string'&&v.indexOf('certify')>=0){for(let k=r;k<r+4;k++){certTexts.push(ws.getRow(k).getCell(1).value);}break;}}
-      // 14행부터 원본 데이터 비우기 (새 행 생성 금지 — OOM 방지)
-      for(let r=START;r<=origLast;r++)for(let c=1;c<=9;c++)ws.getRow(r).getCell(c).value=null;
+      // 14행부터 원본 데이터 비우기
+      for(let r=START;r<=origLast;r++)for(let c=1;c<=12;c++)ws.getRow(r).getCell(c).value=null;
       const lastData=START+n-1;
-      // 컬럼: A=NO B=ICID C=한글 D=원료함량 E=조성% F=Actual(수식) G=기능 H=CAS I=Remark
+      // 데이터 채우기 (12컬럼)
       ingRows.forEach((r,i)=>{
         const rr=ws.getRow(START+i);
         rr.getCell(1).value=r.no;
-        rr.getCell(2).value=r.icid||null;
-        rr.getCell(3).value=r.kor||null;
-        rr.getCell(4).value=(r.rmpct!==''&&r.rmpct!=null)?Number(r.rmpct):null;
-        rr.getCell(5).value=(r.comppct!==''&&r.comppct!=null)?Number(r.comppct):null;
+        rr.getCell(2).value=r.maker||null;
+        rr.getCell(3).value=r.rcode||null;
+        rr.getCell(4).value=r.trade||null;
+        rr.getCell(5).value=r.icid||null;
+        rr.getCell(6).value=r.kor||null;
+        rr.getCell(7).value=(r.rmpct!==''&&r.rmpct!=null)?Number(r.rmpct):null;
+        rr.getCell(8).value=(r.comppct!==''&&r.comppct!=null)?Number(r.comppct):null;
         if(r.comppct!==''&&r.comppct!=null){
           let bf=START+i;for(let k=i;k>=0;k--){if(ingRows[k].rmpct!==''&&ingRows[k].rmpct!=null){bf=START+k;break;}}
-          rr.getCell(6).value={formula:'$D$'+bf+'*E'+(START+i)+'/100'};
-        }else rr.getCell(6).value=null;
-        rr.getCell(7).value=r.func||null;
-        rr.getCell(8).value=r.cas||null;
-        rr.getCell(9).value=r.remark||null;
-        for(let c=1;c<=9;c++){rr.getCell(c).style=JSON.parse(JSON.stringify(styleRef[c]));}
+          rr.getCell(9).value={formula:'$G$'+bf+'*H'+(START+i)+'/100'};
+        }else rr.getCell(9).value=null;
+        rr.getCell(10).value=r.func||null;
+        rr.getCell(11).value=r.cas||null;
+        rr.getCell(12).value=r.remark||null;
+        for(let c=1;c<=12;c++){rr.getCell(c).style=JSON.parse(JSON.stringify(styleRef[c]));}
         if(refH)rr.height=refH;
       });
-      // D열(원료함량) 블록 세로 병합
+      // B/C/D/G(원료사/코드/TradeName/원료함량) 블록 세로 병합
       let bs=0;
       for(let i=1;i<=n;i++){
         const isNew=(i===n)||(ingRows[i].rmpct!==''&&ingRows[i].rmpct!=null);
         if(isNew){const top=START+bs,bot=START+i-1;
-          if(bot>top){try{ws.mergeCells(top,4,bot,4);}catch(e){}}
+          if(bot>top){[2,3,4,7].forEach(col=>{try{ws.mergeCells(top,col,bot,col);}catch(e){}});}
           bs=i;}
       }
-      for(let i=0;i<n;i++){ws.getRow(START+i).getCell(4).alignment={vertical:'middle',horizontal:'right'};}
-      // 첫 정제수 D 잔량 수식
+      for(let i=0;i<n;i++){ws.getRow(START+i).getCell(7).alignment={vertical:'middle',horizontal:'right'};}
+      // 첫 정제수 G 잔량 수식
       const firstWater=ingRows.findIndex(r=>r.rmpct!==''&&(r.icid||'').toLowerCase()==='water');
-      if(firstWater>=0)ws.getRow(START+firstWater).getCell(4).value={formula:'100-SUM(D'+(START+firstWater+1)+':D'+lastData+')'};
+      if(firstWater>=0)ws.getRow(START+firstWater).getCell(7).value={formula:'100-SUM(G'+(START+firstWater+1)+':G'+lastData+')'};
       // 계행
       const sumR=lastData+1;
       const sumRow=ws.getRow(sumR);
       sumRow.getCell(1).value='계';
-      sumRow.getCell(4).value={formula:'SUM(D'+START+':D'+lastData+')'};
-      sumRow.getCell(6).value={formula:'SUM(F'+START+':F'+lastData+')'};
-      for(let c=1;c<=9;c++){sumRow.getCell(c).style=JSON.parse(JSON.stringify(styleRef[c]));}
-      // ★ 계행 아래 모든 셀 style 통째 비우기 (테두리/배경/값 원천 제거 — ExcelJS 잔재 방지)
+      sumRow.getCell(7).value={formula:'SUM(G'+START+':G'+lastData+')'};
+      sumRow.getCell(9).value={formula:'SUM(I'+START+':I'+lastData+')'};
+      for(let c=1;c<=12;c++){sumRow.getCell(c).style=JSON.parse(JSON.stringify(styleRef[c]));}
+      // ★ 계행 아래 모든 셀 style 통째 비우기
       for(let r=sumR+1;r<=ws.rowCount;r++)for(let c=1;c<=16;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.style={};}
       // 인증문구 재배치 (굵게)
       let crow=sumR+1;
       certTexts.forEach(t=>{if(t){const cc=ws.getRow(crow).getCell(1);cc.value=t;
         cc.font={name:'맑은 고딕',size:10,bold:true};
-        try{ws.mergeCells(crow,1,crow,9);}catch(e){}
+        try{ws.mergeCells(crow,1,crow,12);}catch(e){}
         crow++;}});
-      // ★ 테두리: 헤더위·데이터영역 border 제거 후, 13~계행 A~I(9열)에만 부여
-      applyGridBorder(ws,sumR,9);
-      // 도장 삽입 (서명 영역, 인증문구 줄 오른쪽)
+      // ★ 테두리: 13~계행 A~L(12열)에 부여
+      applyGridBorder(ws,sumR,12);
+      // 도장 삽입
       addStamp(wb,ws,sumR);
       // ===== 함량/외부/수출 시트 채우기 =====
       buildOtherSheets(wb,ingRows,styleRef);
