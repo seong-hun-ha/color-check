@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.7</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v7.8</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1185,8 +1185,18 @@
 
   // 작성 행 → 함량(한글명 합산+내림차순) 집계
   function computeAgg(ingRows){
+    // 첫 정제수의 원료함량을 작성시트와 동일하게 잔량(100-나머지 원료함량 합)으로 보정
+    const rmList=ingRows.filter(r=>r.rmpct!==''&&r.rmpct!=null);
+    const firstWaterIdx=ingRows.findIndex(r=>r.rmpct!==''&&r.rmpct!=null&&(r.icid||'').toLowerCase()==='water');
+    let waterResidual=null;
+    if(firstWaterIdx>=0){
+      let othersum=0;
+      ingRows.forEach((r,i)=>{if(i!==firstWaterIdx&&r.rmpct!==''&&r.rmpct!=null)othersum+=Number(r.rmpct);});
+      waterResidual=100-othersum;
+    }
     let curRM=0;
-    const withAct=ingRows.map(r=>{if(r.rmpct!==''&&r.rmpct!=null)curRM=Number(r.rmpct);
+    const withAct=ingRows.map((r,i)=>{
+      if(r.rmpct!==''&&r.rmpct!=null){curRM=(i===firstWaterIdx&&waterResidual!=null)?waterResidual:Number(r.rmpct);}
       const act=(r.comppct!==''&&r.comppct!=null)?curRM*Number(r.comppct)/100:0;
       return {...r,act};});
     const map={};const order=[];
