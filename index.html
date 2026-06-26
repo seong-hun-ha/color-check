@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="compdb.js"></script>
 <script src="template_b64.js"></script>
+<script src="stamp_b64.js"></script>
 <link rel="icon" type="image/png" href="favicon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="품질관리">
@@ -374,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.5</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.6</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1062,10 +1063,12 @@
         try{ws.mergeCells(crow,1,crow,9);}catch(e){}
         for(let c=1;c<=9;c++)ws.getRow(crow).getCell(c).border=noBorder;
         crow++;}});
-      // 데이터 끝~양식 끝까지 남는 옛 행 완전 정리 (값+테두리+배경)
+      // 데이터 끝~양식 끝(넉넉히 90행)까지 남는 옛 행 완전 정리 (값+테두리+배경)
       const emptyB={top:{style:null},bottom:{style:null},left:{style:null},right:{style:null}};
       const emptyF={type:'pattern',pattern:'none'};
-      for(let r=crow;r<=origLast+3;r++)for(let c=1;c<=9;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.border=JSON.parse(JSON.stringify(emptyB));cl.fill=JSON.parse(JSON.stringify(emptyF));}
+      for(let r=crow;r<=90;r++)for(let c=1;c<=10;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.border=JSON.parse(JSON.stringify(emptyB));cl.fill=JSON.parse(JSON.stringify(emptyF));}
+      // 도장 삽입 (서명 영역, 인증문구 줄 오른쪽)
+      addStamp(wb,ws,sumR);
       // ===== 함량/외부/수출 시트 채우기 =====
       buildOtherSheets(wb,ingRows,styleRef);
       const out=await wb.xlsx.writeBuffer();
@@ -1174,10 +1177,22 @@
       try{ws.mergeCells(crow,1,crow,cols);}catch(e){}
       for(let c=1;c<=cols;c++)ws.getRow(crow).getCell(c).border=noBorder;
       crow++;}});
-    // 남는 옛 행 값+테두리+배경 완전 제거
+    // 남는 옛 행 값+테두리+배경 완전 제거 (넉넉히 90행까지)
     const emptyB2={top:{style:null},bottom:{style:null},left:{style:null},right:{style:null}};
     const emptyF2={type:'pattern',pattern:'none'};
-    for(let r=crow;r<=origLast+3;r++)for(let c=1;c<=cols+2;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.border=JSON.parse(JSON.stringify(emptyB2));cl.fill=JSON.parse(JSON.stringify(emptyF2));}
+    for(let r=crow;r<=90;r++)for(let c=1;c<=cols+2;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.border=JSON.parse(JSON.stringify(emptyB2));cl.fill=JSON.parse(JSON.stringify(emptyF2));}
+    // 도장 삽입
+    addStamp(ws.workbook,ws,START+agg.length);
+  }
+  // 도장 이미지 삽입 (서명 영역)
+  function addStamp(wb,ws,sumRow){
+    if(!window.INGRED_STAMP_B64)return;
+    try{
+      const imgId=wb.addImage({base64:window.INGRED_STAMP_B64,extension:'png'});
+      // 인증문구 줄(계행+2 ≈ 서명자 이름 줄) 오른쪽에 도장
+      const r=sumRow+2; // Won-Joo Kim 줄 근처
+      ws.addImage(imgId,{tl:{col:6.2,row:r-0.3},ext:{width:75,height:75}});
+    }catch(e){}
   }
   // 선택된 1% 미만 성분들 순서 섞기 (인접 쌍 swap)
   function swapOrder(agg,selKors){
