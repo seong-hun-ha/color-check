@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v5.9</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.0</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1055,17 +1055,16 @@
       sumRow.getCell(4).value={formula:'SUM(D'+START+':D'+lastData+')'};
       sumRow.getCell(6).value={formula:'SUM(F'+START+':F'+lastData+')'};
       for(let c=1;c<=9;c++){sumRow.getCell(c).style=JSON.parse(JSON.stringify(styleRef[c]));}
+      // ★ 계행 아래 모든 셀 style 통째 비우기 (테두리/배경/값 원천 제거 — ExcelJS 잔재 방지)
+      for(let r=sumR+1;r<=ws.rowCount;r++)for(let c=1;c<=16;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.style={};}
       // 인증문구 재배치 (굵게)
       let crow=sumR+1;
       certTexts.forEach(t=>{if(t){const cc=ws.getRow(crow).getCell(1);cc.value=t;
         cc.font={name:'맑은 고딕',size:10,bold:true};
         try{ws.mergeCells(crow,1,crow,9);}catch(e){}
         crow++;}});
-      // 남는 옛 행 값+배경 정리 (테두리는 gridBorder가 일괄 처리)
-      const emptyF={type:'pattern',pattern:'none'};
-      for(let r=crow;r<=90;r++)for(let c=1;c<=10;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.fill=JSON.parse(JSON.stringify(emptyF));}
-      // ★ 테두리: 전체 제거 후 13~계행, A~I(9열)에만 모든 테두리
-      gridBorder(ws,sumR,9);
+      // ★ 테두리: 헤더위·데이터영역 border 제거 후, 13~계행 A~I(9열)에만 부여
+      applyGridBorder(ws,sumR,9);
       // 도장 삽입 (서명 영역, 인증문구 줄 오른쪽)
       addStamp(wb,ws,sumR);
       // ===== 함량/외부/수출 시트 채우기 =====
@@ -1085,14 +1084,16 @@
   };
 
   // 시트 전체 테두리 제거 후, 13~끝행 / 1~cols 에만 모든 테두리
-  function gridBorder(sheet,endRow,cols){
+  // 헤더위(1~12) 및 데이터영역(13~endRow)의 테두리를 제거 후, 13~endRow/1~cols에만 부여
+  // ※ 계행 아래는 호출 전에 cell.style={} 로 이미 비워둘 것 (ExcelJS 잔재 방지)
+  function applyGridBorder(sheet,endRow,cols){
     const THIN={style:'thin'};
-    const NB={top:{style:null},bottom:{style:null},left:{style:null},right:{style:null}};
     const AB={top:THIN,bottom:THIN,left:THIN,right:THIN};
-    const maxR=Math.max(sheet.rowCount,endRow)+20;
-    // 전체 테두리 제거 (1행~maxR, 1~15열 넉넉히)
-    for(let r=1;r<=maxR;r++)for(let c=1;c<=15;c++)sheet.getRow(r).getCell(c).border=JSON.parse(JSON.stringify(NB));
-    // 13~계행, 1~cols열에만 모든 테두리
+    // 헤더 위(1~12) border 제거
+    for(let r=1;r<=12;r++)for(let c=1;c<=16;c++)sheet.getRow(r).getCell(c).border={};
+    // 데이터영역 13~endRow border 전체 제거 후
+    for(let r=13;r<=endRow;r++)for(let c=1;c<=16;c++)sheet.getRow(r).getCell(c).border={};
+    // 13~endRow, 1~cols 에만 모든 테두리
     for(let r=13;r<=endRow;r++)for(let c=1;c<=cols;c++)sheet.getRow(r).getCell(c).border=JSON.parse(JSON.stringify(AB));
   }
 
@@ -1181,17 +1182,16 @@
     sumRow.getCell(1).value='계';
     if(withPct){sumRow.getCell(4).value={formula:'SUM(D'+START+':D'+(crow-1)+')'};}
     for(let c=1;c<=cols;c++){sumRow.getCell(c).style=JSON.parse(JSON.stringify(ref[c]));}
+    // ★ 계행 아래 모든 셀 style 통째 비우기
+    for(let r=sumR+1;r<=ws.rowCount;r++)for(let c=1;c<=16;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.style={};}
     crow++;
     // 인증문구 (굵게)
     certTexts.forEach(t=>{if(t){const cc=ws.getRow(crow).getCell(1);cc.value=t;
       cc.font={name:'맑은 고딕',size:10,bold:true};
       try{ws.mergeCells(crow,1,crow,cols);}catch(e){}
       crow++;}});
-    // 남는 옛 행 값+배경 정리 (테두리는 gridBorder가 처리)
-    const emptyF2={type:'pattern',pattern:'none'};
-    for(let r=crow;r<=90;r++)for(let c=1;c<=cols+2;c++){const cl=ws.getRow(r).getCell(c);cl.value=null;cl.fill=JSON.parse(JSON.stringify(emptyF2));}
-    // ★ 테두리: 전체 제거 후 13~계행, Remark열까지 포함(withPct=7열, else=6열) 모든 테두리
-    gridBorder(ws,sumR,cols+1);
+    // ★ 테두리: Remark열까지 포함(withPct=7열, else=6열)
+    applyGridBorder(ws,sumR,cols+1);
     // 도장 삽입
     addStamp(ws.workbook,ws,sumR);
   }
