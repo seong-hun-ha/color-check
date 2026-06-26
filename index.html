@@ -285,6 +285,13 @@
   <button class="bigbtn" id="ingPick">📂 처방전 엑셀 선택</button>
   <button class="bigbtn gray" id="ingReset" style="display:none;margin-top:8px">🔄 초기화 (새 처방전)</button>
   <input type="file" id="ingFile" accept=".xlsx,.xls" style="display:none">
+  <details style="margin-top:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px">
+    <summary style="font-size:12.5px;color:var(--dim);cursor:pointer">⚙ 용어 DB 교체 (이 세션만)</summary>
+    <div style="font-size:11.5px;color:var(--dim);margin:8px 0">새 용어 엑셀(comp/신규/배합목적 시트)을 올리면 이 탭에서만 그 DB로 매칭해요. 탭을 닫으면 원래 DB로 돌아갑니다.</div>
+    <button class="bigbtn gray" id="dbPick" style="font-size:13px;padding:10px">📊 용어 DB 엑셀 올리기</button>
+    <input type="file" id="dbFile" accept=".xlsx,.xls" style="display:none">
+    <div id="dbStat" style="font-size:12px;margin-top:8px"></div>
+  </details>
   <div id="ingInfo" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px">
     <div class="wrow"><label>제품명</label><input type="text" id="ingProd" style="width:170px"></div>
     <div class="wrow"><label>작성일</label><input type="text" id="ingDate" style="width:170px" placeholder="2025-12-01"></div>
@@ -387,7 +394,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v8.2</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v8.3</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -852,7 +859,52 @@
   {const _st=setTab;setTab=function(v){setIngTab(false);_st(v);};}
 
   let ingRows=null;
-  const COMP=window.INGRED_COMPDB||{comp:{},new:{},func_map:{}};
+  let COMP=window.INGRED_COMPDB||{comp:{},new:{},func_map:{}};
+
+  // 용어 엑셀(comp/신규/배합목적) → COMP 구조로 변환 (세션 한정 DB 교체용)
+  async function parseCompDBExcel(file){
+    const buf=await file.arrayBuffer();
+    const wb=new ExcelJS.Workbook();await wb.xlsx.load(buf);
+    const known={'Phenethyl Alcohol':'60-12-8','Tryptophan':'73-22-1','Cellulose Gum':'9004-32-4'};
+    const cv=(cell,icid)=>{ // 셀값 (날짜 오인 CAS 복원)
+      let v=cell.value;
+      if(v&&typeof v==='object'){
+        if(v instanceof Date){
+          if(icid&&known[icid])return known[icid];
+          const m=v.getMonth()+1,d=v.getDate(),y=(''+v.getFullYear()).slice(-2);
+          return m+'-'+d+'-'+y;
+        }
+        if('text'in v)v=v.text;else if('result'in v)v=v.result;else if('richText'in v)v=v.richText.map(t=>t.text).join('');else v='';
+      }
+      return v==null?'':v;
+    };
+    const S=v=>(''+v).trim();
+    const N=v=>{if(v===''||v==null)return null;const n=parseFloat((''+v).replace(/[, %]/g,''));return isNaN(n)?null:n;};
+    const ws=wb.getWorksheet('comp');if(!ws)throw new Error('comp 시트가 없습니다');
+    const comp={};let curCode=null,curV=null;
+    ws.eachRow((row,r)=>{if(r===1)return;
+      const nameEc=S(cv(row.getCell(4)))||S(cv(row.getCell(1)));
+      const maker=S(cv(row.getCell(2))),code=S(cv(row.getCell(3)));
+      const icid=S(cv(row.getCell(5))),kor=S(cv(row.getCell(6)));
+      const pct=N(cv(row.getCell(7))),func=S(cv(row.getCell(8))),cas=S(cv(row.getCell(9),S(cv(row.getCell(5)))));
+      if(!icid&&!kor)return;
+      if(code||nameEc){curCode=code||curCode;curV={name_ec:nameEc,maker,ing:[]};(comp[curCode]=comp[curCode]||[]).push(curV);}
+      if(curV)curV.ing.push({icid,kor,pct,func,cas});
+    });
+    const wn=wb.getWorksheet('신규');const nw={};
+    if(wn){let cur=null;wn.eachRow((row,r)=>{
+      const nameEc=S(cv(row.getCell(4)));
+      const icid=S(cv(row.getCell(5))),kor=S(cv(row.getCell(6)));
+      const pct=N(cv(row.getCell(7))),func=S(cv(row.getCell(8))),cas=S(cv(row.getCell(9),S(cv(row.getCell(5)))));
+      if(!icid&&!kor)return;
+      if(nameEc){cur={ing:[]};nw[nameEc]=cur;}
+      if(cur)cur.ing.push({icid,kor,pct,func,cas});
+    });}
+    const fmap={};
+    for(const k in comp)comp[k].forEach(v=>v.ing.forEach(i=>{if(i.icid&&i.func&&!(i.icid.toLowerCase()in fmap))fmap[i.icid.toLowerCase()]=i.func;}));
+    for(const k in nw)nw[k].ing.forEach(i=>{if(i.icid&&i.func&&!(i.icid.toLowerCase()in fmap))fmap[i.icid.toLowerCase()]=i.func;});
+    return {comp,new:nw,func_map:fmap};
+  }
   function pickVariant(code,name,nrows){
     const c=COMP.comp[code];
     const norm=s=>(s||'').trim().replace(/\s+/g,' ').toLowerCase();
@@ -882,6 +934,22 @@
     return null;
   }
   document.getElementById('ingPick').onclick=()=>document.getElementById('ingFile').click();
+  // 용어 DB 교체 (세션 한정)
+  document.getElementById('dbPick').onclick=()=>document.getElementById('dbFile').click();
+  document.getElementById('dbFile').onchange=async e=>{
+    const f=e.target.files[0];if(!f)return;
+    const st=document.getElementById('dbStat');st.textContent='변환 중…';st.style.color='var(--dim)';
+    try{
+      const db=await parseCompDBExcel(f);
+      const nc=Object.keys(db.comp).length,nn=Object.keys(db.new).length,nf=Object.keys(db.func_map).length;
+      if(nc===0)throw new Error('comp 데이터를 읽지 못했습니다');
+      COMP=db;
+      st.innerHTML='✓ DB 교체됨 — 원료 '+nc+' / 신규 '+nn+' / 기능 '+nf+'개 <span style="color:var(--dim)">(이 세션만)</span>';st.style.color='var(--ok,#1a7f37)';
+      // 이미 처방전을 불러온 상태면 재매칭 안내
+      if(ingRows&&ingRows.length)st.innerHTML+='<br><span style="color:var(--dim)">처방전을 다시 불러오면 새 DB로 매칭됩니다.</span>';
+    }catch(err){st.textContent='✗ 실패: '+(err.message||err);st.style.color='var(--fail)';}
+    e.target.value='';
+  };
   document.getElementById('ingFile').onchange=async e=>{
     const f=e.target.files[0];e.target.value='';if(!f)return;
     if(!window.ExcelJS){alert('엑셀 라이브러리 로드 실패. 인터넷 연결 후 다시 시도해주세요.');return;}
