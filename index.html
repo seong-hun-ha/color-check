@@ -289,9 +289,9 @@
     <div id="ingStat" style="font-size:13px;margin-top:8px"></div>
   </div>
   <div id="ingMiss" style="display:none;margin-top:10px;background:#fff4f4;border:1.5px solid var(--fail);border-radius:16px;padding:14px">
-    <div style="font-size:13px;font-weight:800;color:var(--fail);margin-bottom:8px">⚠ 미등록 원료 (COMP DB에 없음)</div>
+    <div style="font-size:13px;font-weight:800;color:var(--fail);margin-bottom:8px">⚠ 미등록 원료 — 조성%를 입력하세요</div>
     <div id="ingMissList" style="font-size:12.5px;line-height:1.8"></div>
-    <div style="font-size:11.5px;color:var(--dim);margin-top:8px">미등록 원료는 조성%·기능·CAS가 비어서 출력됩니다. DB에 추가하면 자동 채워져요.</div>
+    <div style="font-size:11.5px;color:var(--dim);margin-top:8px">조성%를 입력하면 작성 시트에 반영됩니다. 기능·CAS는 같은 성분이 있으면 자동으로 채워졌어요. (이번 생성에만 적용)</div>
   </div>
   <div id="ingPrev" style="display:none;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;max-height:320px;overflow:auto;font-size:11px"></div>
   <button class="bigbtn" id="ingGen" style="display:none;margin-top:10px">📥 전성분표 엑셀 생성</button>
@@ -366,7 +366,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.8</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v4.9</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -900,12 +900,19 @@
     }
     // 작성 행 생성
     const rows=[];let no=0;const miss=[];
+    // 등록된 성분들의 기능/CAS 사전 (미등록 성분 자동채움용)
+    const knownByIcid={};
+    for(const code in COMP.comp){for(const v of COMP.comp[code]){for(const ing of v.ing){
+      if(ing.icid&&!knownByIcid[ing.icid.toLowerCase()])knownByIcid[ing.icid.toLowerCase()]={func:ing.func||'',cas:ing.cas||''};}}}
     for(const rm of rms){
       const v=pickVariant(rm.code,rm.name,rm.rows.length);
       if(!v){
         miss.push((rm.code||'')+' '+rm.name);
-        rm.rows.forEach((rr,i)=>{no++;rows.push({no,rmname:i===0?rm.name:'',icid:rr.icid,kor:rr.kor,
-          rmpct:i===0?rm.total:'',comppct:'',func:'',cas:'',remark:'미등록'});});
+        rm.rows.forEach((rr,i)=>{no++;
+          const k=rr.icid?knownByIcid[rr.icid.toLowerCase()]:null;
+          rows.push({no,rmname:i===0?rm.name:'',icid:rr.icid,kor:rr.kor,
+            rmpct:i===0?rm.total:'',comppct:'',func:k?k.func:'',cas:k?k.cas:'',remark:'미등록',
+            missing:true,blockFirst:i===0});});
         continue;
       }
       v.ing.forEach((ing,i)=>{no++;
@@ -915,21 +922,53 @@
     }
     ingRows=rows;
     document.getElementById('ingInfo').style.display='block';
-    const totRM=rows.filter(r=>r.rmpct!=='').reduce((a,r)=>a+(+r.rmpct||0),0);
-    document.getElementById('ingStat').innerHTML='원료 '+rms.length+'개 · 성분 '+rows.length+'행 · 원료함량합계 <b>'+(Math.round(totRM*1000)/1000)+'</b>';
-    // 미등록 표시
+    renderIngStat();
+    // 미등록 입력 UI
     const mb=document.getElementById('ingMiss');
-    if(miss.length){mb.style.display='block';
-      document.getElementById('ingMissList').innerHTML=miss.map(m=>'• '+m).join('<br>');
+    const missRows=rows.filter(r=>r.missing);
+    if(missRows.length){
+      mb.style.display='block';
+      let mh='';
+      // 미등록 행마다 조성%·기능·CAS 입력칸
+      rows.forEach((r,idx)=>{
+        if(!r.missing)return;
+        mh+='<div style="border-bottom:1px solid #f3d0d0;padding:7px 0">'
+          +'<div style="font-weight:700;font-size:12.5px">'+(r.icid||'(성분명 없음)')+' <span style="color:var(--dim);font-weight:400">'+(r.kor||'')+'</span></div>'
+          +'<div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">'
+          +'<input data-idx="'+idx+'" data-fld="comppct" type="number" inputmode="decimal" placeholder="조성%" value="'+(r.comppct||'')+'" style="width:72px;padding:7px;border:1px solid var(--line);border-radius:8px;font-size:12px">'
+          +'<input data-idx="'+idx+'" data-fld="func" type="text" placeholder="기능" value="'+(r.func||'')+'" style="flex:1;min-width:90px;padding:7px;border:1px solid var(--line);border-radius:8px;font-size:12px">'
+          +'<input data-idx="'+idx+'" data-fld="cas" type="text" placeholder="CAS" value="'+(r.cas||'')+'" style="width:96px;padding:7px;border:1px solid var(--line);border-radius:8px;font-size:12px">'
+          +'</div></div>';
+      });
+      document.getElementById('ingMissList').innerHTML=mh;
+      // 입력 이벤트 → ingRows 갱신
+      document.getElementById('ingMissList').querySelectorAll('input').forEach(inp=>{
+        inp.oninput=()=>{const i=+inp.dataset.idx,f=inp.dataset.fld;
+          let val=inp.value;
+          if(f==='comppct')val=(val===''?'':parseFloat(val));
+          ingRows[i][f]=val;
+          renderIngStat();renderIngPrev();};
+      });
     }else mb.style.display='none';
-    // 미리보기(상위 30행)
-    const pv=document.getElementById('ingPrev');pv.style.display='block';
-    let h='<table style="width:100%;border-collapse:collapse"><tr style="color:var(--dim)"><td>NO</td><td>ICID</td><td>한글</td><td>원료%</td><td>조성%</td></tr>';
-    rows.slice(0,40).forEach(r=>{h+='<tr><td>'+r.no+'</td><td>'+r.icid+'</td><td>'+r.kor+'</td><td>'+(r.rmpct||'')+'</td><td>'+(r.comppct||'')+'</td></tr>';});
-    h+='</table>'+(rows.length>40?'<div style="color:var(--dim);padding:6px">…외 '+(rows.length-40)+'행</div>':'');
-    pv.innerHTML=h;
+    renderIngPrev();
     document.getElementById('ingGen').style.display='block';
   };
+  function renderIngStat(){
+    if(!ingRows)return;
+    const rms=ingRows.filter(r=>r.rmpct!==''&&r.rmpct!=null).length;
+    const totRM=ingRows.filter(r=>r.rmpct!==''&&r.rmpct!=null).reduce((a,r)=>a+(+r.rmpct||0),0);
+    const missLeft=ingRows.filter(r=>r.missing&&(r.comppct===''||r.comppct==null)).length;
+    document.getElementById('ingStat').innerHTML='원료 '+rms+'개 · 성분 '+ingRows.length+'행 · 원료함량합계 <b>'+(Math.round(totRM*1000)/1000)+'</b>'
+      +(missLeft?' · <span style="color:var(--fail)">미입력 조성% '+missLeft+'개</span>':'');
+  }
+  function renderIngPrev(){
+    const pv=document.getElementById('ingPrev');pv.style.display='block';
+    let h='<table style="width:100%;border-collapse:collapse"><tr style="color:var(--dim)"><td>NO</td><td>ICID</td><td>한글</td><td>원료%</td><td>조성%</td></tr>';
+    ingRows.slice(0,40).forEach(r=>{const bg=r.missing?' style="background:#fff4f4"':'';
+      h+='<tr'+bg+'><td>'+r.no+'</td><td>'+r.icid+'</td><td>'+r.kor+'</td><td>'+(r.rmpct||'')+'</td><td>'+(r.comppct!==''&&r.comppct!=null?r.comppct:'')+'</td></tr>';});
+    h+='</table>'+(ingRows.length>40?'<div style="color:var(--dim);padding:6px">…외 '+(ingRows.length-40)+'행</div>':'');
+    pv.innerHTML=h;
+  }
 
   document.getElementById('ingGen').onclick=async()=>{
     if(!ingRows||!ingRows.length){alert('처방전을 먼저 불러와주세요.');return;}
