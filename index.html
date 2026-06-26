@@ -375,7 +375,7 @@
   </div>
 </div>
 
-<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.2</div>
+<div style="text-align:center;font-size:11px;color:#b5b2aa;margin-top:18px">v6.3</div>
 <input type="file" id="file" accept="image/*" capture="environment">
 <input type="file" id="fileAlbum" accept="image/*">
 <input type="file" id="fileA" accept="image/*" capture="environment">
@@ -1161,6 +1161,9 @@
   function fillExternal(ws,agg,withPct){
     if(!ws)return;
     const START=14;
+    // 제품명/날짜 반영 (작성 시트와 동일)
+    ws.getCell('A11').value='Product  Name : '+(document.getElementById('ingProd').value||'');
+    ws.getCell('A10').value='Date : '+(document.getElementById('ingDate').value||'');
     const ref={};const cols=withPct?6:5; // withPct: NO/ICID/한글/함량%/기능/CAS, else NO/ICID/한글/기능/CAS
     for(let c=1;c<=cols;c++){const cl=ws.getRow(START).getCell(c);ref[c]=JSON.parse(JSON.stringify(cl.style||{}));}
     const refH=ws.getRow(START).height;
